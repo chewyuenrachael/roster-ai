@@ -4,6 +4,20 @@
 
 ![RosterAI Screenshot](https://img.shields.io/badge/Status-MVP-green) ![React](https://img.shields.io/badge/React-18-blue) ![Vite](https://img.shields.io/badge/Vite-7-purple)
 
+## 🔴 The Problem
+
+Currently, hospital shift allocation is a painful manual process:
+
+1. **Doctors** indicate their availability by coloring cells on a shared spreadsheet (AL, CB, etc.)
+2. **The "Roster Monster"** (a designated person) manually creates the schedule, trying to:
+   - Ensure fair distribution of calls
+   - Respect everyone's leave requests
+   - Balance weekend duties
+   - Maintain minimum staffing per team
+3. This takes **hours of work** each month and often results in disputes over fairness
+
+**RosterAI automates this entire process** — doctors input their preferences, and the AI generates a fair roster in seconds.
+
 ## ✨ Features
 
 ### For Doctors
