@@ -51,16 +51,46 @@ This document captures all requirements for the automated doctor shift allocatio
 
 ## 3. ALLOCATION RULES & CONSTRAINTS
 
-### 3.1 Call Types (per day)
+### 3.1 Call Types (per day) - CONFIGURABLE
 
-| Call Type | Role | Post-Call Next Day? |
-|-----------|------|---------------------|
-| HO1 | Active On-Call: Reviews new cases with on-call team | Yes |
-| HO2 | Passive On-Call: First line for ward nurse escalations | Yes |
-| HO3 | Handover HO: Reviews handovers, leaves at 10pm | No |
-| HO4 | Additional coverage (if applicable) | Confirm |
+**The system supports HO1 through HO11, configurable per hospital/department.**
 
-**Question**: Does your hospital use HO1/HO2/HO3/HO4, or a different system?
+Each hospital/department can configure:
+- How many HO tiers to use (1-11)
+- Custom name/description for each tier
+- Whether each tier gets post-call the next day
+- Point multiplier for each tier (if different from standard)
+
+#### Default Configuration (Editable)
+
+| Call Type | Default Role | Post-Call? | Enabled |
+|-----------|--------------|------------|---------|
+| HO1 | Active On-Call: Reviews new cases with on-call team | Yes | ✅ |
+| HO2 | Passive On-Call: First line for ward nurse escalations | Yes | ✅ |
+| HO3 | Handover HO: Reviews handovers, leaves at 10pm | No | ✅ |
+| HO4 | Additional coverage | Configurable | ⬜ |
+| HO5 | Custom role | Configurable | ⬜ |
+| HO6 | Custom role | Configurable | ⬜ |
+| HO7 | Custom role | Configurable | ⬜ |
+| HO8 | Custom role | Configurable | ⬜ |
+| HO9 | Custom role | Configurable | ⬜ |
+| HO10 | Custom role | Configurable | ⬜ |
+| HO11 | Custom role | Configurable | ⬜ |
+
+#### Configuration Settings (Admin Feature)
+
+```
+Hospital/Department Settings:
+├── Number of HO tiers: [Dropdown: 1-11]
+├── For each enabled tier:
+│   ├── Display name (e.g., "HO1", "Active", "Night Float")
+│   ├── Description
+│   ├── Gets post-call next day? [Yes/No]
+│   ├── Point multiplier [0.5x, 1x, 1.5x, 2x]
+│   └── Required per day [0, 1, 2, ...]
+```
+
+**Question**: How many HO tiers does your hospital use, and what are their names/roles?
 
 ### 3.2 Call Point System
 
@@ -79,7 +109,7 @@ This document captures all requirements for the automated doctor shift allocatio
 | Equal total calls | Each doctor should have roughly equal calls over the posting period (4 months for HO, 6 months for MO) | [ ] |
 | No EOD calls | No "Every Other Day" calls - minimum 2 days gap between calls | [ ] |
 | Weekend spread | Spread weekend calls fairly - not too many weekends for one person | [ ] |
-| Call type variety | Each doctor should rotate through HO1, HO2, HO3 fairly | [ ] |
+| Call type variety | Each doctor should rotate through all enabled HO tiers fairly | [ ] |
 | Cumulative tracking | Look back at previous months to ensure fairness across the entire posting | [ ] |
 
 ### 3.4 Minimum Staffing Requirements
@@ -126,12 +156,11 @@ This document captures all requirements for the automated doctor shift allocatio
 | Total Calls | Sum of all calls in posting period |
 | Weekend Calls | Count of Sat/Sun calls |
 | Weekday Calls | Count of Mon-Fri calls |
-| HO1 Count | Number of HO1 (active) calls |
-| HO2 Count | Number of HO2 (passive) calls |
-| HO3 Count | Number of HO3 (handover) calls |
-| HO4 Count | Number of HO4 calls (if applicable) |
+| HO1-HO11 Counts | Number of calls per tier (dynamically shown based on enabled tiers) |
 | Day Points | Points based on day type |
 | Cumulative Points | Running total across posting |
+
+**Note**: The HO tier counts (HO1, HO2, ... HO11) are dynamically displayed based on how many tiers are enabled for the hospital/department.
 
 ### 4.3 Target Numbers (Per Month)
 
@@ -221,7 +250,7 @@ This document captures all requirements for the automated doctor shift allocatio
 
 Please confirm or clarify the following:
 
-1. **Call Types**: Do you use HO1/HO2/HO3/HO4, or different names?
+1. **Call Types**: How many HO tiers does your hospital use (HO1-HO11)? What is each tier called and what is their role?
 
 2. **Minimum Staffing**: What are the minimum staff requirements per team?
 
