@@ -531,6 +531,7 @@ const HandoverView = ({ doctors, allocation, month, year, onBack }) => {
 const MyCallsView = ({ doctors, allocation, month, year, onBack }) => {
   const [selectedDoctorId, setSelectedDoctorId] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [viewMode, setViewMode] = useState('calendar'); // 'calendar' or 'list'
   
   const days = generateMonthDays(year, month);
   const enabledTiers = getEnabledHOTiers();
@@ -668,7 +669,26 @@ const MyCallsView = ({ doctors, allocation, month, year, onBack }) => {
             </div>
           </div>
           
+          {/* View Toggle */}
+          <div className="view-toggle">
+            <button 
+              className={`toggle-btn ${viewMode === 'calendar' ? 'active' : ''}`}
+              onClick={() => setViewMode('calendar')}
+            >
+              <Calendar size={16} />
+              <span>Calendar</span>
+            </button>
+            <button 
+              className={`toggle-btn ${viewMode === 'list' ? 'active' : ''}`}
+              onClick={() => setViewMode('list')}
+            >
+              <BarChart3 size={16} />
+              <span>List</span>
+            </button>
+          </div>
+          
           {/* Calendar View */}
+          {viewMode === 'calendar' && (
           <div className="mycalls-calendar-section">
             <h4>📆 Calendar View</h4>
             <div className="mycalls-calendar">
@@ -724,9 +744,10 @@ const MyCallsView = ({ doctors, allocation, month, year, onBack }) => {
               </div>
             </div>
           </div>
+          )}
           
           {/* List View */}
-          {doctorCalls.length > 0 ? (
+          {viewMode === 'list' && (doctorCalls.length > 0 ? (
             <div className="calls-list-section">
               <h4>📋 Call Details</h4>
               <div className="calls-timeline">
@@ -759,7 +780,7 @@ const MyCallsView = ({ doctors, allocation, month, year, onBack }) => {
               <h4>No calls scheduled</h4>
               <p>You don't have any calls allocated for {MONTHS[month]} {year} yet.</p>
             </div>
-          )}
+          ))}
         </div>
       )}
     </div>
@@ -2505,7 +2526,41 @@ const styles = `
     background: #FFFFFF;
     border-radius: 12px;
     border: 1px solid #E5E7EB;
-    margin-bottom: 24px;
+    margin-bottom: 16px;
+  }
+  
+  .view-toggle {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    margin-bottom: 20px;
+  }
+  
+  .toggle-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 20px;
+    background: #F8F9FA;
+    border: 1px solid #E5E7EB;
+    border-radius: 8px;
+    color: #6B7280;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-family: inherit;
+  }
+  
+  .toggle-btn:hover {
+    background: #EDF1F5;
+    color: #3A5A7A;
+  }
+  
+  .toggle-btn.active {
+    background: #3A5A7A;
+    border-color: #3A5A7A;
+    color: #FFFFFF;
   }
   
   .summary-stat { text-align: center; }
