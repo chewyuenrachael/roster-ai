@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Calendar, Users, CheckCircle, AlertCircle, ChevronLeft, ChevronRight, Sparkles, Eye, TrendingUp, Award, Shield, Zap, Info, Filter, BarChart3, Lightbulb, Search, Copy, ArrowDown, Clock, UserCheck, Coffee } from 'lucide-react';
+import { Calendar, Users, CheckCircle, AlertCircle, ChevronLeft, ChevronRight, Sparkles, Eye, TrendingUp, Award, Shield, Zap, Info, Filter, BarChart3, Lightbulb, Search, Copy, ArrowDown, Clock, UserCheck, Coffee, Pill, Building2, CalendarDays, User } from 'lucide-react';
 
 // ============ CONFIGURATION ============
 
@@ -542,6 +542,636 @@ const HandoverView = ({ doctors, allocation, month, year, onBack }) => {
   );
 };
 
+// ============ MY CALLS VIEW COMPONENT ============
+
+const MyCallsView = ({ doctors, allocation, month, year, onBack }) => {
+  const [selectedDoctorId, setSelectedDoctorId] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  
+  const days = generateMonthDays(year, month);
+  const enabledTiers = getEnabledHOTiers();
+  
+  const filteredDoctors = useMemo(() => {
+    if (!searchQuery.trim()) return doctors;
+    return doctors.filter(doc => 
+      doc.name.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  }, [searchQuery, doctors]);
+  
+  const selectedDoctor = selectedDoctorId ? doctors.find(d => d.id === selectedDoctorId) : null;
+  
+  const doctorCalls = useMemo(() => {
+    if (!selectedDoctor) return [];
+    
+    const calls = [];
+    days.forEach(day => {
+      const shift = allocation[selectedDoctor.id]?.[day.date];
+      if (enabledTiers.includes(shift)) {
+        const config = HO_TIERS_CONFIG[shift];
+        calls.push({
+          date: new Date(year, month, day.date),
+          dayNum: day.date,
+          shift,
+          config,
+          day,
+          points: getCallPoints(shift, day)
+        });
+      }
+    });
+    return calls;
+  }, [selectedDoctor, allocation, days, month, year]);
+  
+  const totalPoints = doctorCalls.reduce((sum, call) => sum + call.points, 0);
+  
+  // Group calls by week
+  const callsByWeek = useMemo(() => {
+    const weeks = {};
+    doctorCalls.forEach(call => {
+      const weekNum = Math.ceil(call.dayNum / 7);
+      if (!weeks[weekNum]) weeks[weekNum] = [];
+      weeks[weekNum].push(call);
+    });
+    return weeks;
+  }, [doctorCalls]);
+  
+  return (
+    <div className="mycalls-view">
+      <div className="mycalls-header">
+        <button className="back-btn" onClick={onBack}>
+          <ChevronLeft size={20} />
+          <span>Back</span>
+        </button>
+        <div className="header-title">
+          <CalendarDays size={24} />
+          <h2>My Calls</h2>
+        </div>
+      </div>
+      
+      <div className="mycalls-month">
+        <span className="month-label">{MONTHS[month]} {year}</span>
+      </div>
+      
+      {!selectedDoctor ? (
+        <div className="doctor-selector">
+          <div className="selector-header">
+            <User size={20} />
+            <h3>Select Your Name</h3>
+          </div>
+          
+          <div className="search-input-wrapper">
+            <Search size={18} className="search-icon" />
+            <input
+              type="text"
+              placeholder="Search doctor..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="search-input"
+            />
+            {searchQuery && (
+              <button className="clear-search" onClick={() => setSearchQuery('')}>×</button>
+            )}
+          </div>
+          
+          <div className="doctor-list">
+            {filteredDoctors.map(doc => (
+              <button
+                key={doc.id}
+                className="doctor-select-btn"
+                onClick={() => setSelectedDoctorId(doc.id)}
+              >
+                <div className="doc-avatar" style={{ background: `linear-gradient(135deg, ${SHIFT_TYPES[doc.team]?.color || '#6366f1'}, ${SHIFT_TYPES[doc.team]?.color || '#6366f1'}dd)` }}>
+                  {doc.name.charAt(0)}
+                </div>
+                <div className="doc-info">
+                  <span className="doc-name">{doc.name}</span>
+                  <ShiftBadge shift={doc.team} small />
+                </div>
+                <ChevronRight size={18} className="doc-arrow" />
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <div className="calls-display">
+          <div className="selected-doctor-card">
+            <div className="doc-avatar large" style={{ background: `linear-gradient(135deg, ${SHIFT_TYPES[selectedDoctor.team]?.color || '#6366f1'}, ${SHIFT_TYPES[selectedDoctor.team]?.color || '#6366f1'}dd)` }}>
+              {selectedDoctor.name.charAt(0)}
+            </div>
+            <div className="doc-details">
+              <h3>{selectedDoctor.name}</h3>
+              <div className="doc-meta">
+                <ShiftBadge shift={selectedDoctor.team} small />
+                <span className="cumulative">{selectedDoctor.cumulativePoints} pts cumulative</span>
+              </div>
+            </div>
+            <button className="change-btn" onClick={() => setSelectedDoctorId(null)}>
+              Change
+            </button>
+          </div>
+          
+          <div className="calls-summary">
+            <div className="summary-stat">
+              <span className="stat-value">{doctorCalls.length}</span>
+              <span className="stat-label">Calls</span>
+            </div>
+            <div className="summary-stat">
+              <span className="stat-value">{totalPoints.toFixed(1)}</span>
+              <span className="stat-label">Points</span>
+            </div>
+            <div className="summary-stat">
+              <span className="stat-value">{doctorCalls.filter(c => c.day.isWeekend).length}</span>
+              <span className="stat-label">Weekend</span>
+            </div>
+          </div>
+          
+          {doctorCalls.length > 0 ? (
+            <div className="calls-list-section">
+              <h4>📅 Your Calls This Month</h4>
+              <div className="calls-timeline">
+                {doctorCalls.map((call, idx) => (
+                  <div key={idx} className={`call-entry ${call.day.isWeekend ? 'weekend' : ''}`}>
+                    <div className="call-date-col">
+                      <span className="call-day-name">{DAYS[call.date.getDay()]}</span>
+                      <span className="call-day-num">{call.dayNum}</span>
+                      <span className="call-month-name">{MONTHS[month].slice(0, 3)}</span>
+                    </div>
+                    <div className="call-info-col">
+                      <div className="call-type-row">
+                        <span className="call-emoji">{call.config.emoji}</span>
+                        <ShiftBadge shift={call.shift} />
+                        <span className="call-desc">{call.config.description}</span>
+                      </div>
+                      <div className="call-meta-row">
+                        <span className="call-points">+{call.points.toFixed(1)} pts</span>
+                        {call.day.isWeekend && <span className="weekend-tag">Weekend</span>}
+                        {call.day.isPublicHoliday && <span className="holiday-tag">🎉 {call.day.holidayName}</span>}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="no-calls-message">
+              <Calendar size={48} />
+              <h4>No calls scheduled</h4>
+              <p>You don't have any calls allocated for {MONTHS[month]} {year} yet.</p>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ============ WARD COVERAGE VIEW COMPONENT ============
+
+const WardCoverageView = ({ onBack }) => {
+  const enabledTiers = getEnabledHOTiers();
+  
+  // Ward coverage configuration - customize this based on hospital setup
+  const WARD_COVERAGE = {
+    'HO1': {
+      title: 'Active On-Call',
+      description: 'Reviews new cases with on-call team',
+      wards: [
+        { name: 'ED Admissions', icon: '🚨', notes: 'All new surgical admissions from ED' },
+        { name: 'Ward 45', icon: '🏥', notes: 'General Surgery acute' },
+        { name: 'Ward 46', icon: '🏥', notes: 'General Surgery acute' },
+        { name: 'ICU/HD Consults', icon: '⚠️', notes: 'Surgical consults for ICU patients' },
+      ],
+      responsibilities: [
+        'Review all new ED admissions',
+        'Attend to urgent consults',
+        'Update on-call consultant',
+        'Handover to HO2 for non-urgent ward issues'
+      ]
+    },
+    'HO2': {
+      title: 'Passive On-Call',
+      description: 'First line for ward nurse escalations',
+      wards: [
+        { name: 'Ward 51', icon: '🏥', notes: 'Elective post-op' },
+        { name: 'Ward 52', icon: '🏥', notes: 'Elective post-op' },
+        { name: 'Ward 53', icon: '🏥', notes: 'Mixed surgical' },
+        { name: 'Ward 54', icon: '🏥', notes: 'Step-down care' },
+      ],
+      responsibilities: [
+        'Attend to nurse escalations',
+        'Manage ward issues (pain, vitals, drains)',
+        'Update discharge summaries',
+        'Escalate to HO1 if needed'
+      ]
+    },
+    'HO3': {
+      title: 'Handover HO',
+      description: 'Reviews handovers, leaves at 10pm',
+      wards: [
+        { name: 'All Wards', icon: '📋', notes: 'Handover coverage' },
+      ],
+      responsibilities: [
+        'Collect and consolidate handovers',
+        'Clear pending jobs before 10pm',
+        'Document handover notes',
+        'Leave at 10pm (no overnight)'
+      ]
+    },
+    'HO4': {
+      title: 'Additional Coverage',
+      description: 'Supports team during busy periods',
+      wards: [
+        { name: 'Flexible', icon: '🔄', notes: 'As assigned by HO1/HO2' },
+      ],
+      responsibilities: [
+        'Assist HO1 or HO2 as needed',
+        'Cover overflow cases',
+        'Support during peak hours'
+      ]
+    }
+  };
+  
+  return (
+    <div className="coverage-view">
+      <div className="coverage-header">
+        <button className="back-btn" onClick={onBack}>
+          <ChevronLeft size={20} />
+          <span>Back</span>
+        </button>
+        <div className="header-title">
+          <Building2 size={24} />
+          <h2>Ward Coverage</h2>
+        </div>
+      </div>
+      
+      <div className="coverage-subtitle">
+        <p>Which wards each on-call tier covers</p>
+      </div>
+      
+      <div className="coverage-cards">
+        {enabledTiers.map(tier => {
+          const config = HO_TIERS_CONFIG[tier];
+          const coverage = WARD_COVERAGE[tier] || {
+            title: config.description,
+            description: 'Custom role',
+            wards: [{ name: 'As assigned', icon: '📋', notes: 'Check with roster in-charge' }],
+            responsibilities: ['As assigned']
+          };
+          
+          return (
+            <div key={tier} className="coverage-card" style={{ borderColor: config.color + '50' }}>
+              <div className="coverage-card-header" style={{ background: `linear-gradient(135deg, ${config.color}20, ${config.color}10)` }}>
+                <span className="tier-emoji">{config.emoji}</span>
+                <div className="tier-info">
+                  <h3>{tier} - {coverage.title}</h3>
+                  <p>{coverage.description}</p>
+                </div>
+              </div>
+              
+              <div className="coverage-card-body">
+                <div className="wards-section">
+                  <h4>🏥 Wards Covered</h4>
+                  <div className="wards-list">
+                    {coverage.wards.map((ward, idx) => (
+                      <div key={idx} className="ward-item">
+                        <span className="ward-icon">{ward.icon}</span>
+                        <div className="ward-details">
+                          <span className="ward-name">{ward.name}</span>
+                          <span className="ward-notes">{ward.notes}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                
+                <div className="responsibilities-section">
+                  <h4>📋 Key Responsibilities</h4>
+                  <ul className="responsibilities-list">
+                    {coverage.responsibilities.map((resp, idx) => (
+                      <li key={idx}>{resp}</li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      
+      <div className="coverage-footer">
+        <Info size={16} />
+        <span>Ward assignments may vary. Check with your roster in-charge for any changes.</span>
+      </div>
+    </div>
+  );
+};
+
+// ============ ANTIBIOTIC GUIDELINES VIEW COMPONENT ============
+
+const AntibioticGuidelinesView = ({ onBack }) => {
+  const [selectedSystem, setSelectedSystem] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  
+  // Antibiotic guidelines by system - customize based on hospital guidelines
+  const ABX_GUIDELINES = {
+    'respiratory': {
+      icon: '🫁',
+      name: 'Respiratory',
+      color: '#06b6d4',
+      conditions: [
+        {
+          name: 'Community-Acquired Pneumonia (CAP)',
+          severity: 'Mild',
+          firstLine: 'Amoxicillin 1g TDS PO',
+          alternative: 'Doxycycline 100mg BD PO',
+          duration: '5 days',
+          notes: 'Review at 48-72h'
+        },
+        {
+          name: 'CAP - Moderate/Severe',
+          severity: 'Severe',
+          firstLine: 'Co-amoxiclav 1.2g TDS IV + Azithromycin 500mg OD',
+          alternative: 'Ceftriaxone 2g OD IV + Azithromycin 500mg OD',
+          duration: '5-7 days',
+          notes: 'Consider ICU if needed'
+        },
+        {
+          name: 'Aspiration Pneumonia',
+          severity: 'Moderate',
+          firstLine: 'Co-amoxiclav 1.2g TDS IV',
+          alternative: 'Ceftriaxone 2g OD + Metronidazole 500mg TDS',
+          duration: '5-7 days',
+          notes: 'Add anaerobic cover'
+        }
+      ]
+    },
+    'urinary': {
+      icon: '💧',
+      name: 'Urinary',
+      color: '#f59e0b',
+      conditions: [
+        {
+          name: 'Simple UTI (Cystitis)',
+          severity: 'Mild',
+          firstLine: 'Nitrofurantoin 100mg BD PO',
+          alternative: 'Trimethoprim 200mg BD PO',
+          duration: '3 days (women), 7 days (men)',
+          notes: 'Check local resistance'
+        },
+        {
+          name: 'Pyelonephritis',
+          severity: 'Moderate',
+          firstLine: 'Ciprofloxacin 500mg BD PO',
+          alternative: 'Co-amoxiclav 625mg TDS PO',
+          duration: '7-14 days',
+          notes: 'IV if unable to tolerate PO'
+        },
+        {
+          name: 'Catheter-Associated UTI',
+          severity: 'Moderate',
+          firstLine: 'Ciprofloxacin 400mg BD IV',
+          alternative: 'Gentamicin + Amoxicillin',
+          duration: '7 days',
+          notes: 'Consider catheter change'
+        }
+      ]
+    },
+    'skin': {
+      icon: '🩹',
+      name: 'Skin & Soft Tissue',
+      color: '#ef4444',
+      conditions: [
+        {
+          name: 'Cellulitis - Simple',
+          severity: 'Mild',
+          firstLine: 'Flucloxacillin 500mg QDS PO',
+          alternative: 'Clarithromycin 500mg BD PO',
+          duration: '5-7 days',
+          notes: 'Mark edges, elevate limb'
+        },
+        {
+          name: 'Cellulitis - Severe',
+          severity: 'Severe',
+          firstLine: 'Flucloxacillin 2g QDS IV',
+          alternative: 'Vancomycin if MRSA suspected',
+          duration: '7-14 days',
+          notes: 'Consider surgical debridement'
+        },
+        {
+          name: 'Diabetic Foot Infection',
+          severity: 'Severe',
+          firstLine: 'Co-amoxiclav 1.2g TDS IV + Metronidazole 500mg TDS',
+          alternative: 'Piperacillin-Tazobactam 4.5g TDS',
+          duration: '2-4 weeks',
+          notes: 'Vascular & surgical review'
+        }
+      ]
+    },
+    'abdominal': {
+      icon: '🩺',
+      name: 'Abdominal / Surgical',
+      color: '#8b5cf6',
+      conditions: [
+        {
+          name: 'Intra-abdominal Infection',
+          severity: 'Moderate',
+          firstLine: 'Co-amoxiclav 1.2g TDS IV',
+          alternative: 'Ciprofloxacin + Metronidazole',
+          duration: '4-7 days post source control',
+          notes: 'Source control essential'
+        },
+        {
+          name: 'Biliary Sepsis',
+          severity: 'Severe',
+          firstLine: 'Piperacillin-Tazobactam 4.5g TDS IV',
+          alternative: 'Meropenem 1g TDS IV',
+          duration: '4-7 days',
+          notes: 'ERCP/drainage if needed'
+        },
+        {
+          name: 'Surgical Site Infection',
+          severity: 'Moderate',
+          firstLine: 'Flucloxacillin 1g QDS IV',
+          alternative: 'Co-amoxiclav 1.2g TDS IV',
+          duration: '5-7 days',
+          notes: 'Open wound, send cultures'
+        }
+      ]
+    },
+    'sepsis': {
+      icon: '🚨',
+      name: 'Sepsis',
+      color: '#dc2626',
+      conditions: [
+        {
+          name: 'Sepsis - Unknown Source',
+          severity: 'Severe',
+          firstLine: 'Piperacillin-Tazobactam 4.5g TDS IV',
+          alternative: 'Meropenem 1g TDS IV if recent abx',
+          duration: 'Review daily',
+          notes: 'Blood cultures x2, sepsis 6'
+        },
+        {
+          name: 'Neutropenic Sepsis',
+          severity: 'Severe',
+          firstLine: 'Piperacillin-Tazobactam 4.5g TDS IV',
+          alternative: 'Meropenem + Vancomycin if line infection',
+          duration: 'Until neutrophil recovery',
+          notes: 'Oncology/Haem review'
+        }
+      ]
+    },
+    'prophylaxis': {
+      icon: '💊',
+      name: 'Surgical Prophylaxis',
+      color: '#10b981',
+      conditions: [
+        {
+          name: 'Clean Surgery (hernia, thyroid)',
+          severity: 'Prophylaxis',
+          firstLine: 'Cefazolin 2g IV at induction',
+          alternative: 'Vancomycin if penicillin allergy',
+          duration: 'Single dose',
+          notes: 'Repeat if surgery >4h'
+        },
+        {
+          name: 'Clean-Contaminated (biliary, colorectal)',
+          severity: 'Prophylaxis',
+          firstLine: 'Cefazolin 2g + Metronidazole 500mg IV',
+          alternative: 'Gentamicin + Metronidazole',
+          duration: 'Single dose',
+          notes: '24h max for colorectal'
+        },
+        {
+          name: 'Contaminated/Dirty',
+          severity: 'Treatment',
+          firstLine: 'Treat as infection, not prophylaxis',
+          alternative: '-',
+          duration: 'As per infection',
+          notes: 'Full treatment course'
+        }
+      ]
+    }
+  };
+  
+  const filteredSystems = useMemo(() => {
+    if (!searchQuery.trim()) return Object.entries(ABX_GUIDELINES);
+    const query = searchQuery.toLowerCase();
+    return Object.entries(ABX_GUIDELINES).filter(([key, system]) => {
+      if (system.name.toLowerCase().includes(query)) return true;
+      return system.conditions.some(c => 
+        c.name.toLowerCase().includes(query) ||
+        c.firstLine.toLowerCase().includes(query) ||
+        c.alternative.toLowerCase().includes(query)
+      );
+    });
+  }, [searchQuery]);
+  
+  const selectedSystemData = selectedSystem ? ABX_GUIDELINES[selectedSystem] : null;
+  
+  return (
+    <div className="abx-view">
+      <div className="abx-header">
+        <button className="back-btn" onClick={onBack}>
+          <ChevronLeft size={20} />
+          <span>Back</span>
+        </button>
+        <div className="header-title">
+          <Pill size={24} />
+          <h2>Antibiotic Guidelines</h2>
+        </div>
+      </div>
+      
+      <div className="abx-disclaimer">
+        <AlertCircle size={16} />
+        <span>Always check local guidelines and patient allergies. Consult Microbiology for complex cases.</span>
+      </div>
+      
+      <div className="search-input-wrapper">
+        <Search size={18} className="search-icon" />
+        <input
+          type="text"
+          placeholder="Search condition or antibiotic..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="search-input"
+        />
+        {searchQuery && (
+          <button className="clear-search" onClick={() => setSearchQuery('')}>×</button>
+        )}
+      </div>
+      
+      {!selectedSystem ? (
+        <div className="system-grid">
+          {filteredSystems.map(([key, system]) => (
+            <button
+              key={key}
+              className="system-card"
+              onClick={() => setSelectedSystem(key)}
+              style={{ borderColor: system.color + '40' }}
+            >
+              <div className="system-icon" style={{ background: system.color + '20', color: system.color }}>
+                {system.icon}
+              </div>
+              <span className="system-name">{system.name}</span>
+              <span className="system-count">{system.conditions.length} conditions</span>
+              <ChevronRight size={18} className="system-arrow" />
+            </button>
+          ))}
+        </div>
+      ) : (
+        <div className="condition-list">
+          <button className="back-to-systems" onClick={() => setSelectedSystem(null)}>
+            <ChevronLeft size={16} />
+            <span>All Systems</span>
+          </button>
+          
+          <div className="system-header" style={{ background: `linear-gradient(135deg, ${selectedSystemData.color}20, ${selectedSystemData.color}10)` }}>
+            <span className="system-icon-lg">{selectedSystemData.icon}</span>
+            <h3>{selectedSystemData.name}</h3>
+          </div>
+          
+          <div className="conditions">
+            {selectedSystemData.conditions.map((condition, idx) => (
+              <div key={idx} className="condition-card">
+                <div className="condition-header">
+                  <h4>{condition.name}</h4>
+                  <span className={`severity-badge ${condition.severity.toLowerCase()}`}>
+                    {condition.severity}
+                  </span>
+                </div>
+                
+                <div className="treatment-section">
+                  <div className="treatment-row first-line">
+                    <span className="treatment-label">1st Line:</span>
+                    <span className="treatment-value">{condition.firstLine}</span>
+                  </div>
+                  {condition.alternative !== '-' && (
+                    <div className="treatment-row alternative">
+                      <span className="treatment-label">Alternative:</span>
+                      <span className="treatment-value">{condition.alternative}</span>
+                    </div>
+                  )}
+                  <div className="treatment-row duration">
+                    <span className="treatment-label">Duration:</span>
+                    <span className="treatment-value">{condition.duration}</span>
+                  </div>
+                </div>
+                
+                {condition.notes && (
+                  <div className="condition-notes">
+                    <Info size={14} />
+                    <span>{condition.notes}</span>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 // ============ OTHER COMPONENTS (Abbreviated for space) ============
 
 const DoctorAvailabilityView = ({ doctor, month, year, requests, setRequests, onBack }) => {
@@ -755,6 +1385,43 @@ export default function RosterApp() {
     );
   }
   
+  if (currentView === 'mycalls') {
+    return (
+      <div className="app-container">
+        <style>{styles}</style>
+        <MyCallsView
+          doctors={doctors}
+          allocation={allocation}
+          month={month}
+          year={year}
+          onBack={() => setCurrentView('dashboard')}
+        />
+      </div>
+    );
+  }
+  
+  if (currentView === 'coverage') {
+    return (
+      <div className="app-container">
+        <style>{styles}</style>
+        <WardCoverageView
+          onBack={() => setCurrentView('dashboard')}
+        />
+      </div>
+    );
+  }
+  
+  if (currentView === 'abx') {
+    return (
+      <div className="app-container">
+        <style>{styles}</style>
+        <AntibioticGuidelinesView
+          onBack={() => setCurrentView('dashboard')}
+        />
+      </div>
+    );
+  }
+  
   // Group doctors by team
   const doctorsByTeam = {};
   doctors.forEach(doc => {
@@ -780,10 +1447,21 @@ export default function RosterApp() {
               <Users size={18} /><span>Dashboard</span>
             </button>
             {hasGenerated && (
-              <button className="nav-btn handover-nav" onClick={() => setCurrentView('handover')}>
-                <Clock size={18} /><span>Handover</span>
-              </button>
+              <>
+                <button className={`nav-btn handover-nav ${currentView === 'handover' ? 'active' : ''}`} onClick={() => setCurrentView('handover')}>
+                  <Clock size={18} /><span>Handover</span>
+                </button>
+                <button className={`nav-btn mycalls-nav ${currentView === 'mycalls' ? 'active' : ''}`} onClick={() => setCurrentView('mycalls')}>
+                  <CalendarDays size={18} /><span>My Calls</span>
+                </button>
+              </>
             )}
+            <button className={`nav-btn coverage-nav ${currentView === 'coverage' ? 'active' : ''}`} onClick={() => setCurrentView('coverage')}>
+              <Building2 size={18} /><span>Coverage</span>
+            </button>
+            <button className={`nav-btn abx-nav ${currentView === 'abx' ? 'active' : ''}`} onClick={() => setCurrentView('abx')}>
+              <Pill size={18} /><span>Antibiotics</span>
+            </button>
           </nav>
         </div>
       </header>
@@ -1367,11 +2045,432 @@ const styles = `
   .no-calls { font-size: 13px; color: #64748b; font-style: italic; }
   .no-results { text-align: center; color: #64748b; padding: 20px; }
   
+  /* Nav button variants */
+  .nav-btn.mycalls-nav {
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(251, 191, 36, 0.1));
+    border-color: rgba(245, 158, 11, 0.3);
+    color: #fbbf24;
+  }
+  
+  .nav-btn.coverage-nav {
+    background: linear-gradient(135deg, rgba(139, 92, 246, 0.15), rgba(167, 139, 250, 0.1));
+    border-color: rgba(139, 92, 246, 0.3);
+    color: #a78bfa;
+  }
+  
+  .nav-btn.abx-nav {
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.15), rgba(248, 113, 113, 0.1));
+    border-color: rgba(239, 68, 68, 0.3);
+    color: #f87171;
+  }
+  
+  .nav-btn.mycalls-nav:hover, .nav-btn.mycalls-nav.active {
+    background: rgba(245, 158, 11, 0.25);
+    border-color: rgba(245, 158, 11, 0.5);
+  }
+  
+  .nav-btn.coverage-nav:hover, .nav-btn.coverage-nav.active {
+    background: rgba(139, 92, 246, 0.25);
+    border-color: rgba(139, 92, 246, 0.5);
+  }
+  
+  .nav-btn.abx-nav:hover, .nav-btn.abx-nav.active {
+    background: rgba(239, 68, 68, 0.25);
+    border-color: rgba(239, 68, 68, 0.5);
+  }
+  
+  /* ============ MY CALLS VIEW STYLES ============ */
+  
+  .mycalls-view { max-width: 800px; margin: 0 auto; padding: 32px 24px; }
+  
+  .mycalls-header { display: flex; align-items: center; gap: 20px; margin-bottom: 24px; }
+  .mycalls-header .header-title { display: flex; align-items: center; gap: 12px; color: #fbbf24; }
+  .mycalls-header .header-title h2 { font-size: 28px; font-weight: 800; }
+  
+  .mycalls-month {
+    text-align: center; margin-bottom: 24px;
+  }
+  
+  .month-label {
+    font-size: 18px; font-weight: 600; color: #a5b4fc;
+    background: rgba(99, 102, 241, 0.15);
+    padding: 8px 24px; border-radius: 20px;
+  }
+  
+  .doctor-selector {
+    background: rgba(20, 20, 35, 0.6);
+    border-radius: 20px; padding: 24px;
+    border: 1px solid rgba(99, 102, 241, 0.1);
+  }
+  
+  .selector-header { display: flex; align-items: center; gap: 10px; color: #a5b4fc; margin-bottom: 20px; }
+  .selector-header h3 { font-size: 18px; font-weight: 600; }
+  
+  .doctor-list { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; max-height: 400px; overflow-y: auto; }
+  
+  .doctor-select-btn {
+    display: flex; align-items: center; gap: 14px;
+    padding: 14px 18px;
+    background: rgba(15, 15, 25, 0.7);
+    border: 1px solid rgba(99, 102, 241, 0.1);
+    border-radius: 14px;
+    cursor: pointer; transition: all 0.2s;
+    width: 100%; text-align: left;
+    font-family: inherit;
+    color: #e2e8f0;
+  }
+  
+  .doctor-select-btn:hover {
+    background: rgba(99, 102, 241, 0.15);
+    border-color: rgba(99, 102, 241, 0.3);
+    transform: translateX(4px);
+  }
+  
+  .doc-avatar {
+    width: 42px; height: 42px;
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px; font-weight: 700;
+    color: white;
+  }
+  
+  .doc-avatar.large { width: 56px; height: 56px; font-size: 22px; border-radius: 14px; }
+  
+  .doc-info { flex: 1; display: flex; flex-direction: column; gap: 4px; }
+  .doc-name { font-size: 15px; font-weight: 600; }
+  .doc-arrow { color: #64748b; }
+  
+  .calls-display { }
+  
+  .selected-doctor-card {
+    display: flex; align-items: center; gap: 16px;
+    padding: 20px 24px;
+    background: rgba(20, 20, 35, 0.8);
+    border-radius: 16px;
+    border: 1px solid rgba(99, 102, 241, 0.2);
+    margin-bottom: 20px;
+  }
+  
+  .doc-details h3 { font-size: 20px; font-weight: 700; margin-bottom: 8px; }
+  .doc-details .doc-meta { display: flex; align-items: center; gap: 12px; }
+  .cumulative { font-size: 13px; color: #94a3b8; }
+  
+  .change-btn {
+    padding: 8px 16px;
+    background: rgba(100, 116, 139, 0.2);
+    border: 1px solid rgba(100, 116, 139, 0.3);
+    border-radius: 8px;
+    color: #94a3b8; font-size: 13px; font-weight: 500;
+    cursor: pointer; transition: all 0.2s;
+    font-family: inherit;
+  }
+  
+  .change-btn:hover { background: rgba(100, 116, 139, 0.3); color: #f1f5f9; }
+  
+  .calls-summary {
+    display: flex; justify-content: center; gap: 24px;
+    padding: 20px;
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.1), rgba(251, 191, 36, 0.05));
+    border-radius: 16px;
+    border: 1px solid rgba(245, 158, 11, 0.2);
+    margin-bottom: 24px;
+  }
+  
+  .summary-stat { text-align: center; }
+  .stat-value { display: block; font-size: 28px; font-weight: 800; color: #fbbf24; font-family: 'JetBrains Mono', monospace; }
+  .stat-label { font-size: 12px; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; }
+  
+  .calls-list-section {
+    background: rgba(20, 20, 35, 0.6);
+    border-radius: 20px; padding: 24px;
+    border: 1px solid rgba(99, 102, 241, 0.1);
+  }
+  
+  .calls-list-section h4 { font-size: 16px; font-weight: 600; margin-bottom: 16px; color: #f1f5f9; }
+  
+  .calls-timeline { display: flex; flex-direction: column; gap: 10px; }
+  
+  .call-entry {
+    display: flex; align-items: stretch; gap: 16px;
+    padding: 16px;
+    background: rgba(15, 15, 25, 0.7);
+    border-radius: 14px;
+    border: 1px solid rgba(99, 102, 241, 0.1);
+    transition: all 0.2s;
+  }
+  
+  .call-entry:hover { background: rgba(99, 102, 241, 0.1); }
+  .call-entry.weekend { background: rgba(245, 158, 11, 0.1); border-color: rgba(245, 158, 11, 0.2); }
+  
+  .call-date-col {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    min-width: 60px;
+    padding: 8px 12px;
+    background: rgba(99, 102, 241, 0.1);
+    border-radius: 10px;
+  }
+  
+  .call-day-name { font-size: 11px; color: #94a3b8; text-transform: uppercase; }
+  .call-day-num { font-size: 24px; font-weight: 800; color: #f1f5f9; }
+  .call-month-name { font-size: 11px; color: #64748b; }
+  
+  .call-info-col { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 8px; }
+  
+  .call-type-row { display: flex; align-items: center; gap: 10px; }
+  .call-emoji { font-size: 18px; }
+  .call-desc { font-size: 14px; color: #94a3b8; }
+  
+  .call-meta-row { display: flex; align-items: center; gap: 10px; }
+  .call-points { font-size: 13px; color: #22c55e; font-weight: 600; font-family: 'JetBrains Mono', monospace; }
+  .weekend-tag { font-size: 11px; padding: 2px 8px; background: rgba(245, 158, 11, 0.2); color: #fbbf24; border-radius: 4px; }
+  .holiday-tag { font-size: 11px; padding: 2px 8px; background: rgba(239, 68, 68, 0.2); color: #f87171; border-radius: 4px; }
+  
+  .no-calls-message {
+    text-align: center; padding: 60px 20px;
+    color: #64748b;
+  }
+  
+  .no-calls-message svg { margin-bottom: 16px; opacity: 0.5; }
+  .no-calls-message h4 { font-size: 18px; font-weight: 600; color: #94a3b8; margin-bottom: 8px; }
+  .no-calls-message p { font-size: 14px; }
+  
+  /* ============ WARD COVERAGE VIEW STYLES ============ */
+  
+  .coverage-view { max-width: 1000px; margin: 0 auto; padding: 32px 24px; }
+  
+  .coverage-header { display: flex; align-items: center; gap: 20px; margin-bottom: 16px; }
+  .coverage-header .header-title { display: flex; align-items: center; gap: 12px; color: #a78bfa; }
+  .coverage-header .header-title h2 { font-size: 28px; font-weight: 800; }
+  
+  .coverage-subtitle { text-align: center; margin-bottom: 28px; }
+  .coverage-subtitle p { font-size: 15px; color: #94a3b8; }
+  
+  .coverage-cards { display: flex; flex-direction: column; gap: 20px; }
+  
+  .coverage-card {
+    background: rgba(20, 20, 35, 0.8);
+    border-radius: 20px;
+    border: 2px solid;
+    overflow: hidden;
+  }
+  
+  .coverage-card-header {
+    display: flex; align-items: center; gap: 16px;
+    padding: 20px 24px;
+  }
+  
+  .coverage-card-header .tier-emoji { font-size: 32px; }
+  .coverage-card-header .tier-info h3 { font-size: 18px; font-weight: 700; margin-bottom: 4px; }
+  .coverage-card-header .tier-info p { font-size: 13px; color: #94a3b8; }
+  
+  .coverage-card-body { padding: 0 24px 24px; }
+  
+  .wards-section, .responsibilities-section { margin-bottom: 20px; }
+  .wards-section h4, .responsibilities-section h4 { font-size: 14px; font-weight: 600; color: #a5b4fc; margin-bottom: 12px; }
+  
+  .wards-list { display: flex; flex-direction: column; gap: 8px; }
+  
+  .ward-item {
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 16px;
+    background: rgba(15, 15, 25, 0.6);
+    border-radius: 10px;
+  }
+  
+  .ward-icon { font-size: 20px; }
+  .ward-details { display: flex; flex-direction: column; }
+  .ward-name { font-size: 14px; font-weight: 600; color: #f1f5f9; }
+  .ward-notes { font-size: 12px; color: #64748b; }
+  
+  .responsibilities-list {
+    list-style: none; padding: 0; margin: 0;
+    display: flex; flex-direction: column; gap: 6px;
+  }
+  
+  .responsibilities-list li {
+    display: flex; align-items: center; gap: 10px;
+    font-size: 13px; color: #94a3b8;
+    padding: 8px 12px;
+    background: rgba(15, 15, 25, 0.4);
+    border-radius: 8px;
+  }
+  
+  .responsibilities-list li::before {
+    content: '•';
+    color: #a78bfa;
+    font-weight: bold;
+  }
+  
+  .coverage-footer {
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    margin-top: 24px;
+    padding: 16px;
+    background: rgba(100, 116, 139, 0.1);
+    border-radius: 12px;
+    color: #64748b;
+    font-size: 13px;
+  }
+  
+  /* ============ ANTIBIOTIC GUIDELINES VIEW STYLES ============ */
+  
+  .abx-view { max-width: 900px; margin: 0 auto; padding: 32px 24px; }
+  
+  .abx-header { display: flex; align-items: center; gap: 20px; margin-bottom: 16px; }
+  .abx-header .header-title { display: flex; align-items: center; gap: 12px; color: #f87171; }
+  .abx-header .header-title h2 { font-size: 28px; font-weight: 800; }
+  
+  .abx-disclaimer {
+    display: flex; align-items: center; gap: 10px;
+    padding: 14px 18px;
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.2);
+    border-radius: 12px;
+    color: #f87171;
+    font-size: 13px;
+    margin-bottom: 24px;
+  }
+  
+  .abx-view .search-input-wrapper { margin-bottom: 24px; }
+  
+  .system-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 14px;
+  }
+  
+  .system-card {
+    display: flex; align-items: center; gap: 14px;
+    padding: 18px 20px;
+    background: rgba(20, 20, 35, 0.8);
+    border: 2px solid;
+    border-radius: 16px;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-align: left;
+    font-family: inherit;
+    color: #e2e8f0;
+  }
+  
+  .system-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+  }
+  
+  .system-icon {
+    width: 48px; height: 48px;
+    border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 24px;
+  }
+  
+  .system-name { flex: 1; font-size: 16px; font-weight: 600; }
+  .system-count { font-size: 12px; color: #64748b; }
+  .system-arrow { color: #64748b; }
+  
+  .condition-list { }
+  
+  .back-to-systems {
+    display: flex; align-items: center; gap: 6px;
+    padding: 8px 16px;
+    background: rgba(100, 116, 139, 0.2);
+    border: 1px solid rgba(100, 116, 139, 0.3);
+    border-radius: 8px;
+    color: #94a3b8; font-size: 13px; font-weight: 500;
+    cursor: pointer; margin-bottom: 20px;
+    font-family: inherit;
+    transition: all 0.2s;
+  }
+  
+  .back-to-systems:hover { background: rgba(100, 116, 139, 0.3); color: #f1f5f9; }
+  
+  .system-header {
+    display: flex; align-items: center; gap: 16px;
+    padding: 20px 24px;
+    border-radius: 16px;
+    margin-bottom: 20px;
+  }
+  
+  .system-icon-lg { font-size: 36px; }
+  .system-header h3 { font-size: 24px; font-weight: 700; }
+  
+  .conditions { display: flex; flex-direction: column; gap: 16px; }
+  
+  .condition-card {
+    background: rgba(20, 20, 35, 0.8);
+    border-radius: 16px;
+    padding: 20px;
+    border: 1px solid rgba(99, 102, 241, 0.1);
+  }
+  
+  .condition-header {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid rgba(99, 102, 241, 0.1);
+  }
+  
+  .condition-header h4 { font-size: 16px; font-weight: 600; color: #f1f5f9; }
+  
+  .severity-badge {
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  
+  .severity-badge.mild { background: rgba(34, 197, 94, 0.2); color: #22c55e; }
+  .severity-badge.moderate { background: rgba(245, 158, 11, 0.2); color: #f59e0b; }
+  .severity-badge.severe { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
+  .severity-badge.prophylaxis { background: rgba(99, 102, 241, 0.2); color: #6366f1; }
+  .severity-badge.treatment { background: rgba(139, 92, 246, 0.2); color: #8b5cf6; }
+  
+  .treatment-section { display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px; }
+  
+  .treatment-row {
+    display: flex; gap: 12px;
+    padding: 10px 14px;
+    background: rgba(15, 15, 25, 0.6);
+    border-radius: 10px;
+  }
+  
+  .treatment-label {
+    min-width: 80px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #64748b;
+    text-transform: uppercase;
+  }
+  
+  .treatment-value {
+    font-size: 14px;
+    color: #e2e8f0;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  
+  .treatment-row.first-line { border-left: 3px solid #22c55e; }
+  .treatment-row.alternative { border-left: 3px solid #f59e0b; }
+  .treatment-row.duration { border-left: 3px solid #6366f1; }
+  
+  .condition-notes {
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 14px;
+    background: rgba(100, 116, 139, 0.1);
+    border-radius: 8px;
+    color: #94a3b8;
+    font-size: 13px;
+  }
+  
   @media (max-width: 768px) {
     .header-content { flex-direction: column; gap: 16px; }
+    .header-nav { flex-wrap: wrap; justify-content: center; }
     .status-bar { flex-direction: column; gap: 20px; text-align: center; }
     .team-doctors { grid-template-columns: 1fr; }
     .current-month { font-size: 22px; min-width: auto; }
     .handover-cta { flex-direction: column; text-align: center; gap: 16px; }
+    .system-grid { grid-template-columns: 1fr; }
+    .calls-summary { flex-wrap: wrap; }
+    .selected-doctor-card { flex-direction: column; text-align: center; }
   }
 `;
