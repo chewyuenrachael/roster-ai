@@ -1760,14 +1760,14 @@ export default function RosterApp() {
 }
 
 const styles = `
-  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Source+Serif+4:wght@400;500;600;700;800&display=swap');
   
   * { margin: 0; padding: 0; box-sizing: border-box; }
   
   .app-container {
     min-height: 100vh;
     background: #0a0a0f;
-    font-family: 'Inter', sans-serif;
+    font-family: 'Source Serif 4', serif;
     color: #e2e8f0;
   }
   
@@ -1886,7 +1886,7 @@ const styles = `
     position: absolute; top: 50%; left: 50%;
     transform: translate(-50%, -50%);
     font-size: 16px; font-weight: 700;
-    font-family: 'JetBrains Mono', monospace;
+    font-family: 'Source Serif 4', serif;
     color: #a5b4fc;
   }
   
@@ -2036,7 +2036,7 @@ const styles = `
   .card-info { flex: 1; min-width: 0; }
   .card-info h3 { font-size: 15px; font-weight: 600; margin-bottom: 6px; }
   .card-meta { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
-  .points { font-size: 12px; color: #64748b; font-family: 'JetBrains Mono', monospace; }
+  .points { font-size: 12px; color: #64748b; font-family: 'Source Serif 4', serif; }
   
   .request-badges { display: flex; gap: 6px; }
   .req-badge { font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: 600; }
@@ -2051,7 +2051,7 @@ const styles = `
     padding: 5px 10px; border-radius: 6px;
     font-size: 11px; font-weight: 700;
     letter-spacing: 0.5px; text-transform: uppercase;
-    font-family: 'JetBrains Mono', monospace;
+    font-family: 'Source Serif 4', serif;
     display: inline-block;
   }
   
@@ -2100,7 +2100,7 @@ const styles = `
   .request-summary { display: flex; gap: 16px; padding: 12px 20px; background: rgba(30, 30, 50, 0.6); border-radius: 12px; }
   .summary-item { display: flex; align-items: center; gap: 6px; }
   .summary-item span { font-size: 12px; color: #64748b; }
-  .summary-item strong { font-size: 16px; font-family: 'JetBrains Mono', monospace; color: #a5b4fc; }
+  .summary-item strong { font-size: 16px; font-family: 'Source Serif 4', serif; color: #a5b4fc; }
   
   .calendar-grid {
     background: rgba(20, 20, 35, 0.6);
@@ -2301,7 +2301,7 @@ const styles = `
     border-radius: 8px;
   }
   
-  .call-date { font-size: 12px; color: #94a3b8; font-family: 'JetBrains Mono', monospace; }
+  .call-date { font-size: 12px; color: #94a3b8; font-family: 'Source Serif 4', serif; }
   .no-calls { font-size: 13px; color: #64748b; font-style: italic; }
   .no-results { text-align: center; color: #64748b; padding: 20px; }
   
@@ -2448,7 +2448,7 @@ const styles = `
   }
   
   .summary-stat { text-align: center; }
-  .stat-value { display: block; font-size: 28px; font-weight: 800; color: #fbbf24; font-family: 'JetBrains Mono', monospace; }
+  .stat-value { display: block; font-size: 28px; font-weight: 800; color: #fbbf24; font-family: 'Source Serif 4', serif; }
   .stat-label { font-size: 12px; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; }
   
   .calls-list-section {
@@ -2492,7 +2492,7 @@ const styles = `
   .call-desc { font-size: 14px; color: #94a3b8; }
   
   .call-meta-row { display: flex; align-items: center; gap: 10px; }
-  .call-points { font-size: 13px; color: #22c55e; font-weight: 600; font-family: 'JetBrains Mono', monospace; }
+  .call-points { font-size: 13px; color: #22c55e; font-weight: 600; font-family: 'Source Serif 4', serif; }
   .weekend-tag { font-size: 11px; padding: 2px 8px; background: rgba(245, 158, 11, 0.2); color: #fbbf24; border-radius: 4px; }
   .holiday-tag { font-size: 11px; padding: 2px 8px; background: rgba(239, 68, 68, 0.2); color: #f87171; border-radius: 4px; }
   
@@ -2717,7 +2717,7 @@ const styles = `
   .treatment-value {
     font-size: 14px;
     color: #e2e8f0;
-    font-family: 'JetBrains Mono', monospace;
+    font-family: 'Source Serif 4', serif;
   }
   
   .treatment-row.first-line { border-left: 3px solid #22c55e; }
@@ -2847,7 +2847,7 @@ const styles = `
     border-radius: 4px;
     font-size: 9px;
     font-weight: 700;
-    font-family: 'JetBrains Mono', monospace;
+    font-family: 'Source Serif 4', serif;
   }
   
   .stats-cell {
@@ -2855,7 +2855,7 @@ const styles = `
     font-size: 13px;
     font-weight: 600;
     color: #94a3b8;
-    font-family: 'JetBrains Mono', monospace;
+    font-family: 'Source Serif 4', serif;
   }
   
   .stats-cell.points { color: #4ade80; }
@@ -2923,7 +2923,7 @@ const styles = `
     text-align: center;
     font-size: 13px;
     color: #94a3b8;
-    font-family: 'JetBrains Mono', monospace;
+    font-family: 'Source Serif 4', serif;
   }
   
   .stats-col.name {
@@ -2933,7 +2933,7 @@ const styles = `
     display: flex;
     align-items: center;
     gap: 10px;
-    font-family: 'Inter', sans-serif;
+    font-family: 'Source Serif 4', serif;
     font-weight: 500;
     color: #f1f5f9;
   }
