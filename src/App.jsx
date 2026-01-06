@@ -62,27 +62,11 @@ const MINIMUM_STAFFING = {
 };
 
 const INITIAL_DOCTORS = [
-  { id: 1, name: 'Sarah Chen', team: 'NES', cumulativePoints: 17.5 },
-  { id: 2, name: 'Marcus Wong', team: 'VAS', cumulativePoints: 16.0 },
-  { id: 3, name: 'Emily Tan', team: 'ESU', cumulativePoints: 15.0 },
-  { id: 4, name: 'Raj Sharma', team: 'PRAS', cumulativePoints: 17.0 },
-  { id: 5, name: 'Jessica Lim', team: 'URO', cumulativePoints: 15.5 },
-  { id: 6, name: 'David Ng', team: 'ESU', cumulativePoints: 14.5 },
-  { id: 7, name: 'Michelle Goh', team: 'ESU', cumulativePoints: 17.0 },
-  { id: 8, name: 'Kevin Teo', team: 'URO', cumulativePoints: 16.5 },
-  { id: 9, name: 'Amanda Lee', team: 'ESU', cumulativePoints: 16.0 },
-  { id: 10, name: 'Ryan Koh', team: 'PRAS', cumulativePoints: 16.0 },
-  { id: 11, name: 'Priya Nair', team: 'CLR', cumulativePoints: 16.0 },
-  { id: 12, name: 'Jason Ong', team: 'BES', cumulativePoints: 16.0 },
-  { id: 13, name: 'Nicole Yeo', team: 'ESU', cumulativePoints: 17.0 },
-  { id: 14, name: 'Benjamin Chua', team: 'CLR', cumulativePoints: 15.5 },
-  { id: 15, name: 'Vanessa Loh', team: 'UGI', cumulativePoints: 16.5 },
-  { id: 16, name: 'Andrew Sim', team: 'VAS', cumulativePoints: 15.0 },
-  { id: 17, name: 'Rachel Foo', team: 'HPB', cumulativePoints: 17.0 },
-  { id: 18, name: 'Daniel Pang', team: 'NES', cumulativePoints: 15.5 },
-  { id: 19, name: 'Samantha Ho', team: 'HPB', cumulativePoints: 9.0 },
-  { id: 20, name: 'Timothy Seah', team: 'VAS', cumulativePoints: 5.0 },
-  { id: 21, name: 'Grace Tan', team: 'UGI', cumulativePoints: 6.0 },
+  { id: 1, name: 'Sarah Chen', team: 'ESU', cumulativePoints: 17.5 },
+  { id: 2, name: 'Marcus Wong', team: 'ESU', cumulativePoints: 16.0 },
+  { id: 3, name: 'Emily Tan', team: 'CLR', cumulativePoints: 15.0 },
+  { id: 4, name: 'Raj Sharma', team: 'CLR', cumulativePoints: 17.0 },
+  { id: 5, name: 'Jessica Lim', team: 'VAS', cumulativePoints: 15.5 },
 ];
 
 const PUBLIC_HOLIDAYS = {
@@ -1172,6 +1156,209 @@ const AntibioticGuidelinesView = ({ onBack }) => {
   );
 };
 
+// ============ MONTHLY ROSTER VIEW COMPONENT ============
+
+const MonthlyRosterView = ({ doctors, allocation, callPoints, month, year, onBack }) => {
+  const days = generateMonthDays(year, month);
+  const enabledTiers = getEnabledHOTiers();
+  
+  // Get daily summary for each day
+  const getDailySummary = (dayNum) => {
+    const summary = {};
+    enabledTiers.forEach(tier => { summary[tier] = null; });
+    summary.PC = [];
+    summary.AL = [];
+    
+    doctors.forEach(doc => {
+      const shift = allocation[doc.id]?.[dayNum];
+      if (enabledTiers.includes(shift)) {
+        summary[shift] = doc;
+      } else if (shift === 'PC') {
+        summary.PC.push(doc);
+      } else if (shift === 'AL') {
+        summary.AL.push(doc);
+      }
+    });
+    
+    return summary;
+  };
+  
+  // Calculate totals for each doctor
+  const doctorStats = useMemo(() => {
+    return doctors.map(doc => {
+      const stats = { calls: 0, weekendCalls: 0, points: callPoints[doc.id] || 0 };
+      enabledTiers.forEach(tier => { stats[tier] = 0; });
+      
+      days.forEach(day => {
+        const shift = allocation[doc.id]?.[day.date];
+        if (enabledTiers.includes(shift)) {
+          stats.calls++;
+          stats[shift]++;
+          if (day.isWeekend) stats.weekendCalls++;
+        }
+      });
+      
+      return { ...doc, ...stats };
+    });
+  }, [doctors, allocation, days, callPoints]);
+  
+  return (
+    <div className="roster-view">
+      <div className="roster-header">
+        <button className="back-btn" onClick={onBack}>
+          <ChevronLeft size={20} />
+          <span>Back</span>
+        </button>
+        <div className="header-title">
+          <Calendar size={24} />
+          <h2>Monthly Roster</h2>
+        </div>
+      </div>
+      
+      <div className="roster-month-label">
+        <h3>{MONTHS[month]} {year}</h3>
+      </div>
+      
+      {/* Legend */}
+      <div className="roster-legend">
+        {enabledTiers.map(tier => {
+          const config = HO_TIERS_CONFIG[tier];
+          return (
+            <div key={tier} className="legend-item">
+              <span className="legend-color" style={{ backgroundColor: config.color }}></span>
+              <span className="legend-label">{tier}</span>
+            </div>
+          );
+        })}
+        <div className="legend-item">
+          <span className="legend-color" style={{ backgroundColor: '#10b981' }}></span>
+          <span className="legend-label">PC</span>
+        </div>
+        <div className="legend-item">
+          <span className="legend-color" style={{ backgroundColor: '#6366f1' }}></span>
+          <span className="legend-label">AL</span>
+        </div>
+      </div>
+      
+      {/* Roster Grid */}
+      <div className="roster-grid-container">
+        <div className="roster-grid">
+          {/* Header Row - Days */}
+          <div className="grid-header-row">
+            <div className="grid-cell doctor-header">Doctor</div>
+            {days.map(day => (
+              <div 
+                key={day.date} 
+                className={`grid-cell day-header ${day.isWeekend ? 'weekend' : ''} ${day.isPublicHoliday ? 'holiday' : ''}`}
+              >
+                <span className="day-name">{DAYS[day.dayOfWeek]}</span>
+                <span className="day-num">{day.date}</span>
+              </div>
+            ))}
+            <div className="grid-cell stats-header">Calls</div>
+            <div className="grid-cell stats-header">Pts</div>
+          </div>
+          
+          {/* Doctor Rows */}
+          {doctorStats.map(doc => (
+            <div key={doc.id} className="grid-row">
+              <div className="grid-cell doctor-cell">
+                <span className="doctor-name-grid">{doc.name.split(' ')[0]}</span>
+                <ShiftBadge shift={doc.team} small />
+              </div>
+              {days.map(day => {
+                const shift = allocation[doc.id]?.[day.date];
+                const shiftInfo = SHIFT_TYPES[shift];
+                return (
+                  <div 
+                    key={day.date} 
+                    className={`grid-cell shift-cell ${day.isWeekend ? 'weekend' : ''} ${shift ? 'has-shift' : ''}`}
+                    style={shift ? { backgroundColor: shiftInfo?.color + '30' } : {}}
+                  >
+                    {shift && (
+                      <span 
+                        className="shift-mini"
+                        style={{ backgroundColor: shiftInfo?.color, color: shiftInfo?.textColor }}
+                      >
+                        {shift}
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
+              <div className="grid-cell stats-cell">{doc.calls}</div>
+              <div className="grid-cell stats-cell points">{doc.points.toFixed(1)}</div>
+            </div>
+          ))}
+          
+          {/* Daily Summary Row */}
+          <div className="grid-row summary-row">
+            <div className="grid-cell doctor-cell summary-label">On-Call</div>
+            {days.map(day => {
+              const summary = getDailySummary(day.date);
+              return (
+                <div 
+                  key={day.date} 
+                  className={`grid-cell summary-cell ${day.isWeekend ? 'weekend' : ''}`}
+                >
+                  <div className="summary-stack">
+                    {enabledTiers.slice(0, 2).map(tier => {
+                      const doc = summary[tier];
+                      const config = HO_TIERS_CONFIG[tier];
+                      return doc ? (
+                        <span 
+                          key={tier} 
+                          className="summary-mini"
+                          style={{ backgroundColor: config.color }}
+                          title={`${tier}: ${doc.name}`}
+                        >
+                          {doc.name.charAt(0)}
+                        </span>
+                      ) : null;
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+            <div className="grid-cell"></div>
+            <div className="grid-cell"></div>
+          </div>
+        </div>
+      </div>
+      
+      {/* Stats Summary */}
+      <div className="roster-stats-section">
+        <h4>📊 Call Distribution</h4>
+        <div className="stats-table">
+          <div className="stats-header-row">
+            <div className="stats-col name">Doctor</div>
+            <div className="stats-col">Total</div>
+            {enabledTiers.map(tier => (
+              <div key={tier} className="stats-col">{tier}</div>
+            ))}
+            <div className="stats-col">Wknd</div>
+            <div className="stats-col highlight">Points</div>
+          </div>
+          {doctorStats.map(doc => (
+            <div key={doc.id} className="stats-row">
+              <div className="stats-col name">
+                <span>{doc.name}</span>
+                <ShiftBadge shift={doc.team} small />
+              </div>
+              <div className="stats-col">{doc.calls}</div>
+              {enabledTiers.map(tier => (
+                <div key={tier} className="stats-col">{doc[tier]}</div>
+              ))}
+              <div className="stats-col">{doc.weekendCalls}</div>
+              <div className="stats-col highlight">{doc.points.toFixed(1)}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // ============ OTHER COMPONENTS (Abbreviated for space) ============
 
 const DoctorAvailabilityView = ({ doctor, month, year, requests, setRequests, onBack }) => {
@@ -1385,6 +1572,22 @@ export default function RosterApp() {
     );
   }
   
+  if (currentView === 'roster') {
+    return (
+      <div className="app-container">
+        <style>{styles}</style>
+        <MonthlyRosterView
+          doctors={doctors}
+          allocation={allocation}
+          callPoints={callPoints}
+          month={month}
+          year={year}
+          onBack={() => setCurrentView('dashboard')}
+        />
+      </div>
+    );
+  }
+  
   if (currentView === 'mycalls') {
     return (
       <div className="app-container">
@@ -1448,6 +1651,9 @@ export default function RosterApp() {
             </button>
             {hasGenerated && (
               <>
+                <button className={`nav-btn roster-nav ${currentView === 'roster' ? 'active' : ''}`} onClick={() => setCurrentView('roster')}>
+                  <Calendar size={18} /><span>Roster</span>
+                </button>
                 <button className={`nav-btn handover-nav ${currentView === 'handover' ? 'active' : ''}`} onClick={() => setCurrentView('handover')}>
                   <Clock size={18} /><span>Handover</span>
                 </button>
@@ -1495,18 +1701,33 @@ export default function RosterApp() {
           </div>
           
           {hasGenerated && (
-            <div className="handover-cta">
-              <div className="cta-content">
-                <Clock size={24} />
-                <div>
-                  <h3>Quick Handover View</h3>
-                  <p>See today's and tomorrow's on-call team, search for any doctor's schedule</p>
+            <div className="generated-ctas">
+              <div className="roster-cta">
+                <div className="cta-content">
+                  <Calendar size={24} />
+                  <div>
+                    <h3>View Full Roster</h3>
+                    <p>See the complete monthly schedule for all doctors</p>
+                  </div>
                 </div>
+                <button className="cta-btn roster" onClick={() => setCurrentView('roster')}>
+                  Open Roster
+                  <ChevronRight size={20} />
+                </button>
               </div>
-              <button className="cta-btn" onClick={() => setCurrentView('handover')}>
-                Open Handover View
-                <ChevronRight size={20} />
-              </button>
+              <div className="handover-cta">
+                <div className="cta-content">
+                  <Clock size={24} />
+                  <div>
+                    <h3>Quick Handover View</h3>
+                    <p>See today's and tomorrow's on-call team</p>
+                  </div>
+                </div>
+                <button className="cta-btn" onClick={() => setCurrentView('handover')}>
+                  Open Handover
+                  <ChevronRight size={20} />
+                </button>
+              </div>
             </div>
           )}
           
@@ -1700,32 +1921,71 @@ const styles = `
   
   @keyframes spin { to { transform: rotate(360deg); } }
   
-  /* Handover CTA */
-  .handover-cta {
-    display: flex; justify-content: space-between; align-items: center;
-    padding: 20px 28px;
-    background: linear-gradient(135deg, rgba(20, 184, 166, 0.15), rgba(6, 182, 212, 0.1));
-    border: 1px solid rgba(20, 184, 166, 0.3);
-    border-radius: 16px;
+  /* Generated CTAs */
+  .generated-ctas {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 16px;
   }
   
-  .cta-content { display: flex; align-items: center; gap: 16px; color: #5eead4; }
-  .cta-content h3 { font-size: 16px; font-weight: 600; margin-bottom: 4px; }
-  .cta-content p { font-size: 13px; color: #94a3b8; }
+  .roster-cta, .handover-cta {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 20px 24px;
+    border-radius: 16px;
+    flex-wrap: wrap;
+    gap: 16px;
+  }
+  
+  .roster-cta {
+    background: linear-gradient(135deg, rgba(34, 197, 94, 0.15), rgba(74, 222, 128, 0.1));
+    border: 1px solid rgba(34, 197, 94, 0.3);
+  }
+  
+  .roster-cta .cta-content { color: #4ade80; }
+  
+  .handover-cta {
+    background: linear-gradient(135deg, rgba(20, 184, 166, 0.15), rgba(6, 182, 212, 0.1));
+    border: 1px solid rgba(20, 184, 166, 0.3);
+  }
+  
+  .handover-cta .cta-content { color: #5eead4; }
+  
+  .cta-content { display: flex; align-items: center; gap: 16px; }
+  .cta-content h3 { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
+  .cta-content p { font-size: 12px; color: #94a3b8; }
   
   .cta-btn {
     display: flex; align-items: center; gap: 8px;
-    padding: 12px 24px;
-    background: rgba(20, 184, 166, 0.2);
-    border: 1px solid rgba(20, 184, 166, 0.4);
+    padding: 10px 20px;
     border-radius: 10px;
-    color: #5eead4; font-weight: 600;
+    font-weight: 600;
     cursor: pointer; transition: all 0.2s;
     font-family: inherit;
+    font-size: 13px;
+    white-space: nowrap;
+  }
+  
+  .cta-btn.roster {
+    background: rgba(34, 197, 94, 0.2);
+    border: 1px solid rgba(34, 197, 94, 0.4);
+    color: #4ade80;
+  }
+  
+  .cta-btn.roster:hover {
+    background: rgba(34, 197, 94, 0.3);
+  }
+  
+  .handover-cta .cta-btn {
+    background: rgba(20, 184, 166, 0.2);
+    border: 1px solid rgba(20, 184, 166, 0.4);
+    color: #5eead4;
+  }
+  
+  .handover-cta .cta-btn:hover {
+    background: rgba(20, 184, 166, 0.3);
   }
   
   .cta-btn:hover {
-    background: rgba(20, 184, 166, 0.3);
     transform: translateX(4px);
   }
   
@@ -2046,6 +2306,17 @@ const styles = `
   .no-results { text-align: center; color: #64748b; padding: 20px; }
   
   /* Nav button variants */
+  .nav-btn.roster-nav {
+    background: linear-gradient(135deg, rgba(34, 197, 94, 0.15), rgba(74, 222, 128, 0.1));
+    border-color: rgba(34, 197, 94, 0.3);
+    color: #4ade80;
+  }
+  
+  .nav-btn.roster-nav:hover, .nav-btn.roster-nav.active {
+    background: rgba(34, 197, 94, 0.25);
+    border-color: rgba(34, 197, 94, 0.5);
+  }
+  
   .nav-btn.mycalls-nav {
     background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(251, 191, 36, 0.1));
     border-color: rgba(245, 158, 11, 0.3);
@@ -2461,6 +2732,213 @@ const styles = `
     color: #94a3b8;
     font-size: 13px;
   }
+  
+  /* ============ MONTHLY ROSTER VIEW STYLES ============ */
+  
+  .roster-view { max-width: 100%; margin: 0 auto; padding: 32px 24px; overflow-x: auto; }
+  
+  .roster-header { display: flex; align-items: center; gap: 20px; margin-bottom: 16px; }
+  .roster-header .header-title { display: flex; align-items: center; gap: 12px; color: #4ade80; }
+  .roster-header .header-title h2 { font-size: 28px; font-weight: 800; }
+  
+  .roster-month-label { text-align: center; margin-bottom: 20px; }
+  .roster-month-label h3 {
+    font-size: 22px; font-weight: 700;
+    color: #a5b4fc;
+    display: inline-block;
+    padding: 8px 24px;
+    background: rgba(99, 102, 241, 0.15);
+    border-radius: 20px;
+  }
+  
+  .roster-legend {
+    display: flex; justify-content: center; flex-wrap: wrap; gap: 16px;
+    margin-bottom: 24px;
+    padding: 14px 20px;
+    background: rgba(20, 20, 35, 0.6);
+    border-radius: 12px;
+  }
+  
+  .legend-item { display: flex; align-items: center; gap: 6px; }
+  .legend-color { width: 16px; height: 16px; border-radius: 4px; }
+  .legend-label { font-size: 12px; color: #94a3b8; font-weight: 600; }
+  
+  .roster-grid-container {
+    background: rgba(20, 20, 35, 0.6);
+    border-radius: 20px;
+    padding: 20px;
+    border: 1px solid rgba(99, 102, 241, 0.1);
+    overflow-x: auto;
+    margin-bottom: 24px;
+  }
+  
+  .roster-grid { display: table; width: 100%; min-width: max-content; border-collapse: collapse; }
+  
+  .grid-header-row, .grid-row { display: table-row; }
+  
+  .grid-cell {
+    display: table-cell;
+    padding: 8px 4px;
+    text-align: center;
+    vertical-align: middle;
+    border-bottom: 1px solid rgba(99, 102, 241, 0.1);
+  }
+  
+  .doctor-header {
+    text-align: left;
+    padding-left: 12px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #64748b;
+    min-width: 120px;
+    position: sticky;
+    left: 0;
+    background: rgba(20, 20, 35, 0.95);
+    z-index: 10;
+  }
+  
+  .day-header {
+    min-width: 42px;
+    padding: 8px 2px;
+  }
+  
+  .day-header .day-name { display: block; font-size: 10px; color: #64748b; text-transform: uppercase; }
+  .day-header .day-num { display: block; font-size: 14px; font-weight: 700; color: #e2e8f0; }
+  .day-header.weekend { background: rgba(245, 158, 11, 0.1); }
+  .day-header.weekend .day-num { color: #fbbf24; }
+  .day-header.holiday { background: rgba(239, 68, 68, 0.15); }
+  .day-header.holiday .day-num { color: #f87171; }
+  
+  .stats-header {
+    min-width: 50px;
+    font-size: 11px;
+    font-weight: 600;
+    color: #64748b;
+  }
+  
+  .doctor-cell {
+    text-align: left;
+    padding-left: 12px;
+    min-width: 120px;
+    position: sticky;
+    left: 0;
+    background: rgba(15, 15, 25, 0.95);
+    z-index: 10;
+  }
+  
+  .doctor-name-grid {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    color: #f1f5f9;
+    margin-bottom: 2px;
+  }
+  
+  .shift-cell {
+    min-width: 42px;
+    transition: all 0.15s;
+  }
+  
+  .shift-cell.weekend { background: rgba(245, 158, 11, 0.05); }
+  
+  .shift-mini {
+    display: inline-block;
+    padding: 2px 5px;
+    border-radius: 4px;
+    font-size: 9px;
+    font-weight: 700;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  
+  .stats-cell {
+    min-width: 50px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #94a3b8;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  
+  .stats-cell.points { color: #4ade80; }
+  
+  .summary-row { background: rgba(99, 102, 241, 0.08); }
+  .summary-row .doctor-cell { background: rgba(99, 102, 241, 0.15); }
+  
+  .summary-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: #a5b4fc;
+    text-transform: uppercase;
+  }
+  
+  .summary-cell { padding: 6px 2px; }
+  
+  .summary-stack { display: flex; justify-content: center; gap: 2px; }
+  
+  .summary-mini {
+    width: 18px; height: 18px;
+    border-radius: 4px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 9px; font-weight: 700;
+    color: white;
+  }
+  
+  /* Stats Section */
+  .roster-stats-section {
+    background: rgba(20, 20, 35, 0.6);
+    border-radius: 20px;
+    padding: 24px;
+    border: 1px solid rgba(99, 102, 241, 0.1);
+  }
+  
+  .roster-stats-section h4 {
+    font-size: 16px; font-weight: 600;
+    color: #f1f5f9;
+    margin-bottom: 16px;
+  }
+  
+  .stats-table { overflow-x: auto; }
+  
+  .stats-header-row, .stats-row { display: flex; align-items: center; }
+  
+  .stats-header-row {
+    padding: 10px 0;
+    border-bottom: 1px solid rgba(99, 102, 241, 0.2);
+    font-size: 11px;
+    font-weight: 600;
+    color: #64748b;
+    text-transform: uppercase;
+  }
+  
+  .stats-row {
+    padding: 12px 0;
+    border-bottom: 1px solid rgba(99, 102, 241, 0.05);
+    transition: background 0.15s;
+  }
+  
+  .stats-row:hover { background: rgba(99, 102, 241, 0.08); }
+  
+  .stats-col {
+    flex: 1;
+    min-width: 50px;
+    text-align: center;
+    font-size: 13px;
+    color: #94a3b8;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  
+  .stats-col.name {
+    flex: 2;
+    min-width: 150px;
+    text-align: left;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-family: 'Inter', sans-serif;
+    font-weight: 500;
+    color: #f1f5f9;
+  }
+  
+  .stats-col.highlight { color: #4ade80; font-weight: 600; }
   
   @media (max-width: 768px) {
     .header-content { flex-direction: column; gap: 16px; }
