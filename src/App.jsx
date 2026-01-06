@@ -668,9 +668,67 @@ const MyCallsView = ({ doctors, allocation, month, year, onBack }) => {
             </div>
           </div>
           
+          {/* Calendar View */}
+          <div className="mycalls-calendar-section">
+            <h4>📆 Calendar View</h4>
+            <div className="mycalls-calendar">
+              <div className="mycalls-cal-header">
+                {DAYS.map(d => <div key={d} className="mycalls-cal-day-header">{d}</div>)}
+              </div>
+              <div className="mycalls-cal-body">
+                {[...Array(new Date(year, month, 1).getDay())].map((_, i) => (
+                  <div key={`empty-${i}`} className="mycalls-cal-cell empty" />
+                ))}
+                {days.map(day => {
+                  const shift = allocation[selectedDoctor.id]?.[day.date];
+                  const isCall = enabledTiers.includes(shift);
+                  const isPostCall = shift === 'PC';
+                  const isLeave = shift === 'AL';
+                  const shiftInfo = SHIFT_TYPES[shift];
+                  const tierConfig = HO_TIERS_CONFIG[shift];
+                  
+                  return (
+                    <div
+                      key={day.date}
+                      className={`mycalls-cal-cell ${day.isWeekend ? 'weekend' : ''} ${isCall ? 'has-call' : ''} ${isPostCall ? 'post-call' : ''} ${isLeave ? 'on-leave' : ''}`}
+                      style={isCall ? { backgroundColor: shiftInfo?.color + '20', borderColor: shiftInfo?.color } : {}}
+                    >
+                      <span className={`mycalls-cal-date ${isCall ? 'call-date' : ''}`}>{day.date}</span>
+                      {isCall && (
+                        <div className="mycalls-cal-shift">
+                          <span className="cal-shift-badge" style={{ backgroundColor: shiftInfo?.color, color: shiftInfo?.textColor }}>
+                            {shift}
+                          </span>
+                        </div>
+                      )}
+                      {isPostCall && <span className="cal-status-badge pc">PC</span>}
+                      {isLeave && <span className="cal-status-badge al">AL</span>}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+            <div className="mycalls-cal-legend">
+              {enabledTiers.slice(0, 4).map(tier => {
+                const config = HO_TIERS_CONFIG[tier];
+                return (
+                  <div key={tier} className="cal-legend-item">
+                    <span className="cal-legend-color" style={{ backgroundColor: config.color }}></span>
+                    <span className="cal-legend-text">{tier} - {config.description}</span>
+                  </div>
+                );
+              })}
+              <div className="cal-legend-item">
+                <span className="cal-legend-color" style={{ backgroundColor: '#6B9A8A' }}></span>
+                <span className="cal-legend-text">PC - Post-Call</span>
+              </div>
+            </div>
+          </div>
+          
+          {/* List View */}
           {doctorCalls.length > 0 ? (
             <div className="calls-list-section">
-              <h4>📅 Your Calls This Month</h4>
+              <h4>📋 Call Details</h4>
               <div className="calls-timeline">
                 {doctorCalls.map((call, idx) => (
                   <div key={idx} className={`call-entry ${call.day.isWeekend ? 'weekend' : ''}`}>
@@ -2507,6 +2565,151 @@ const styles = `
   .no-calls-message svg { margin-bottom: 16px; opacity: 0.5; }
   .no-calls-message h4 { font-size: 18px; font-weight: 600; color: #1F2933; margin-bottom: 8px; }
   .no-calls-message p { font-size: 14px; }
+  
+  /* My Calls Calendar View */
+  .mycalls-calendar-section {
+    background: #FFFFFF;
+    border-radius: 12px;
+    padding: 24px;
+    border: 1px solid #E5E7EB;
+    margin-bottom: 20px;
+  }
+  
+  .mycalls-calendar-section h4 {
+    font-size: 16px;
+    font-weight: 600;
+    color: #1F2933;
+    margin-bottom: 16px;
+  }
+  
+  .mycalls-calendar {
+    background: #F8F9FA;
+    border-radius: 10px;
+    padding: 16px;
+    margin-bottom: 16px;
+  }
+  
+  .mycalls-cal-header {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 4px;
+    margin-bottom: 8px;
+  }
+  
+  .mycalls-cal-day-header {
+    text-align: center;
+    font-size: 11px;
+    font-weight: 600;
+    color: #6B7280;
+    padding: 8px 4px;
+    text-transform: uppercase;
+  }
+  
+  .mycalls-cal-body {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 4px;
+  }
+  
+  .mycalls-cal-cell {
+    aspect-ratio: 1;
+    min-height: 60px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    background: #FFFFFF;
+    border-radius: 8px;
+    border: 2px solid transparent;
+    transition: all 0.2s;
+    position: relative;
+  }
+  
+  .mycalls-cal-cell.empty {
+    background: transparent;
+  }
+  
+  .mycalls-cal-cell.weekend {
+    background: #FBF6E6;
+  }
+  
+  .mycalls-cal-cell.has-call {
+    border-width: 2px;
+  }
+  
+  .mycalls-cal-cell.post-call {
+    background: #EAF3EF;
+  }
+  
+  .mycalls-cal-cell.on-leave {
+    background: #EDF1F5;
+  }
+  
+  .mycalls-cal-date {
+    font-size: 14px;
+    font-weight: 600;
+    color: #1F2933;
+  }
+  
+  .mycalls-cal-date.call-date {
+    font-weight: 700;
+  }
+  
+  .mycalls-cal-shift {
+    display: flex;
+    justify-content: center;
+  }
+  
+  .cal-shift-badge {
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+  }
+  
+  .cal-status-badge {
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 9px;
+    font-weight: 600;
+  }
+  
+  .cal-status-badge.pc {
+    background: #6B9A8A;
+    color: white;
+  }
+  
+  .cal-status-badge.al {
+    background: #8AA1B4;
+    color: white;
+  }
+  
+  .mycalls-cal-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    padding-top: 12px;
+    border-top: 1px solid #E5E7EB;
+  }
+  
+  .cal-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  
+  .cal-legend-color {
+    width: 12px;
+    height: 12px;
+    border-radius: 3px;
+  }
+  
+  .cal-legend-text {
+    font-size: 11px;
+    color: #6B7280;
+  }
   
   /* ============ WARD COVERAGE VIEW STYLES ============ */
   
