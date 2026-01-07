@@ -1238,8 +1238,43 @@ const AntibioticGuidelinesView = ({ onBack }) => {
 // ============ MONTHLY ROSTER VIEW COMPONENT ============
 
 const MonthlyRosterView = ({ doctors, allocation, callPoints, month, year, onBack }) => {
+  const [viewMode, setViewMode] = useState('month'); // 'month' or 'week'
+  const [currentWeek, setCurrentWeek] = useState(0);
+  
   const days = generateMonthDays(year, month);
   const enabledTiers = getEnabledHOTiers();
+  
+  // Group days into weeks
+  const weeks = useMemo(() => {
+    const result = [];
+    let currentWeekDays = [];
+    const firstDayOffset = new Date(year, month, 1).getDay();
+    
+    // Add empty slots for days before the 1st
+    for (let i = 0; i < firstDayOffset; i++) {
+      currentWeekDays.push(null);
+    }
+    
+    days.forEach(day => {
+      currentWeekDays.push(day);
+      if (currentWeekDays.length === 7) {
+        result.push(currentWeekDays);
+        currentWeekDays = [];
+      }
+    });
+    
+    // Add remaining days as last week
+    if (currentWeekDays.length > 0) {
+      while (currentWeekDays.length < 7) {
+        currentWeekDays.push(null);
+      }
+      result.push(currentWeekDays);
+    }
+    
+    return result;
+  }, [days, year, month]);
+  
+  const currentWeekDays = weeks[currentWeek] || [];
   
   // Get daily summary for each day
   const getDailySummary = (dayNum) => {
@@ -1298,6 +1333,24 @@ const MonthlyRosterView = ({ doctors, allocation, callPoints, month, year, onBac
         <h3>{MONTHS[month]} {year}</h3>
       </div>
       
+      {/* View Toggle */}
+      <div className="roster-view-toggle">
+        <button 
+          className={`toggle-btn ${viewMode === 'month' ? 'active' : ''}`}
+          onClick={() => setViewMode('month')}
+        >
+          <Calendar size={16} />
+          <span>Month</span>
+        </button>
+        <button 
+          className={`toggle-btn ${viewMode === 'week' ? 'active' : ''}`}
+          onClick={() => setViewMode('week')}
+        >
+          <CalendarDays size={16} />
+          <span>Week</span>
+        </button>
+      </div>
+      
       {/* Legend */}
       <div className="roster-legend">
         {enabledTiers.map(tier => {
@@ -1319,91 +1372,217 @@ const MonthlyRosterView = ({ doctors, allocation, callPoints, month, year, onBac
         </div>
       </div>
       
-      {/* Roster Grid */}
-      <div className="roster-grid-container">
-        <div className="roster-grid">
-          {/* Header Row - Days */}
-          <div className="grid-header-row">
-            <div className="grid-cell doctor-header">Doctor</div>
-            {days.map(day => (
-              <div 
-                key={day.date} 
-                className={`grid-cell day-header ${day.isWeekend ? 'weekend' : ''} ${day.isPublicHoliday ? 'holiday' : ''}`}
-              >
-                <span className="day-name">{DAYS[day.dayOfWeek]}</span>
-                <span className="day-num">{day.date}</span>
+      {/* Monthly Roster Grid */}
+      {viewMode === 'month' && (
+        <div className="roster-grid-container">
+          <div className="roster-grid">
+            {/* Header Row - Days */}
+            <div className="grid-header-row">
+              <div className="grid-cell doctor-header">Doctor</div>
+              {days.map(day => (
+                <div 
+                  key={day.date} 
+                  className={`grid-cell day-header ${day.isWeekend ? 'weekend' : ''} ${day.isPublicHoliday ? 'holiday' : ''}`}
+                >
+                  <span className="day-name">{DAYS[day.dayOfWeek]}</span>
+                  <span className="day-num">{day.date}</span>
+                </div>
+              ))}
+              <div className="grid-cell stats-header">Calls</div>
+              <div className="grid-cell stats-header">Pts</div>
+            </div>
+            
+            {/* Doctor Rows */}
+            {doctorStats.map(doc => (
+              <div key={doc.id} className="grid-row">
+                <div className="grid-cell doctor-cell">
+                  <span className="doctor-name-grid">{doc.name.split(' ')[0]}</span>
+                  <ShiftBadge shift={doc.team} small />
+                </div>
+                {days.map(day => {
+                  const shift = allocation[doc.id]?.[day.date];
+                  const shiftInfo = SHIFT_TYPES[shift];
+                  return (
+                    <div 
+                      key={day.date} 
+                      className={`grid-cell shift-cell ${day.isWeekend ? 'weekend' : ''} ${shift ? 'has-shift' : ''}`}
+                      style={shift ? { backgroundColor: shiftInfo?.color + '30' } : {}}
+                    >
+                      {shift && (
+                        <span 
+                          className="shift-mini"
+                          style={{ backgroundColor: shiftInfo?.color, color: shiftInfo?.textColor }}
+                        >
+                          {shift}
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+                <div className="grid-cell stats-cell">{doc.calls}</div>
+                <div className="grid-cell stats-cell points">{doc.points.toFixed(1)}</div>
               </div>
             ))}
-            <div className="grid-cell stats-header">Calls</div>
-            <div className="grid-cell stats-header">Pts</div>
-          </div>
-          
-          {/* Doctor Rows */}
-          {doctorStats.map(doc => (
-            <div key={doc.id} className="grid-row">
-              <div className="grid-cell doctor-cell">
-                <span className="doctor-name-grid">{doc.name.split(' ')[0]}</span>
-                <ShiftBadge shift={doc.team} small />
-              </div>
+            
+            {/* Daily Summary Row */}
+            <div className="grid-row summary-row">
+              <div className="grid-cell doctor-cell summary-label">On-Call</div>
               {days.map(day => {
-                const shift = allocation[doc.id]?.[day.date];
-                const shiftInfo = SHIFT_TYPES[shift];
+                const summary = getDailySummary(day.date);
                 return (
                   <div 
                     key={day.date} 
-                    className={`grid-cell shift-cell ${day.isWeekend ? 'weekend' : ''} ${shift ? 'has-shift' : ''}`}
-                    style={shift ? { backgroundColor: shiftInfo?.color + '30' } : {}}
+                    className={`grid-cell summary-cell ${day.isWeekend ? 'weekend' : ''}`}
                   >
-                    {shift && (
-                      <span 
-                        className="shift-mini"
-                        style={{ backgroundColor: shiftInfo?.color, color: shiftInfo?.textColor }}
-                      >
-                        {shift}
-                      </span>
-                    )}
+                    <div className="summary-stack">
+                      {enabledTiers.slice(0, 2).map(tier => {
+                        const doc = summary[tier];
+                        const config = HO_TIERS_CONFIG[tier];
+                        return doc ? (
+                          <span 
+                            key={tier} 
+                            className="summary-mini"
+                            style={{ backgroundColor: config.color }}
+                            title={`${tier}: ${doc.name}`}
+                          >
+                            {doc.name.charAt(0)}
+                          </span>
+                        ) : null;
+                      })}
+                    </div>
                   </div>
                 );
               })}
-              <div className="grid-cell stats-cell">{doc.calls}</div>
-              <div className="grid-cell stats-cell points">{doc.points.toFixed(1)}</div>
+              <div className="grid-cell"></div>
+              <div className="grid-cell"></div>
             </div>
-          ))}
-          
-          {/* Daily Summary Row */}
-          <div className="grid-row summary-row">
-            <div className="grid-cell doctor-cell summary-label">On-Call</div>
-            {days.map(day => {
-              const summary = getDailySummary(day.date);
-              return (
-                <div 
-                  key={day.date} 
-                  className={`grid-cell summary-cell ${day.isWeekend ? 'weekend' : ''}`}
-                >
-                  <div className="summary-stack">
-                    {enabledTiers.slice(0, 2).map(tier => {
-                      const doc = summary[tier];
-                      const config = HO_TIERS_CONFIG[tier];
-                      return doc ? (
-                        <span 
-                          key={tier} 
-                          className="summary-mini"
-                          style={{ backgroundColor: config.color }}
-                          title={`${tier}: ${doc.name}`}
-                        >
-                          {doc.name.charAt(0)}
-                        </span>
-                      ) : null;
-                    })}
-                  </div>
-                </div>
-              );
-            })}
-            <div className="grid-cell"></div>
-            <div className="grid-cell"></div>
           </div>
         </div>
-      </div>
+      )}
+      
+      {/* Weekly Roster View */}
+      {viewMode === 'week' && (
+        <div className="weekly-roster-container">
+          {/* Week Navigation */}
+          <div className="week-navigator">
+            <button 
+              className="week-nav-btn"
+              onClick={() => setCurrentWeek(w => Math.max(0, w - 1))}
+              disabled={currentWeek === 0}
+            >
+              <ChevronLeft size={20} />
+            </button>
+            <div className="week-label">
+              <span className="week-title">Week {currentWeek + 1} of {weeks.length}</span>
+              <span className="week-dates">
+                {currentWeekDays.find(d => d)?.date} - {currentWeekDays.filter(d => d).slice(-1)[0]?.date} {MONTHS[month].slice(0, 3)}
+              </span>
+            </div>
+            <button 
+              className="week-nav-btn"
+              onClick={() => setCurrentWeek(w => Math.min(weeks.length - 1, w + 1))}
+              disabled={currentWeek === weeks.length - 1}
+            >
+              <ChevronRight size={20} />
+            </button>
+          </div>
+          
+          {/* Weekly Grid */}
+          <div className="weekly-grid">
+            {/* Day Headers */}
+            <div className="weekly-header-row">
+              <div className="weekly-cell doctor-col">Doctor</div>
+              {DAYS.map((dayName, idx) => {
+                const day = currentWeekDays[idx];
+                return (
+                  <div 
+                    key={idx} 
+                    className={`weekly-cell day-col ${day?.isWeekend ? 'weekend' : ''} ${day?.isPublicHoliday ? 'holiday' : ''} ${!day ? 'empty' : ''}`}
+                  >
+                    <span className="weekly-day-name">{dayName}</span>
+                    {day && <span className="weekly-day-num">{day.date}</span>}
+                  </div>
+                );
+              })}
+            </div>
+            
+            {/* Doctor Rows */}
+            {doctorStats.map(doc => (
+              <div key={doc.id} className="weekly-row">
+                <div className="weekly-cell doctor-col">
+                  <div className="weekly-doc-avatar" style={{ background: SHIFT_TYPES[doc.team]?.color }}>
+                    {doc.name.charAt(0)}
+                  </div>
+                  <div className="weekly-doc-info">
+                    <span className="weekly-doc-name">{doc.name}</span>
+                    <ShiftBadge shift={doc.team} small />
+                  </div>
+                </div>
+                {currentWeekDays.map((day, idx) => {
+                  if (!day) {
+                    return <div key={idx} className="weekly-cell shift-col empty"></div>;
+                  }
+                  const shift = allocation[doc.id]?.[day.date];
+                  const shiftInfo = SHIFT_TYPES[shift];
+                  const tierConfig = HO_TIERS_CONFIG[shift];
+                  return (
+                    <div 
+                      key={idx} 
+                      className={`weekly-cell shift-col ${day.isWeekend ? 'weekend' : ''} ${shift ? 'has-shift' : ''}`}
+                      style={shift ? { backgroundColor: shiftInfo?.color + '15' } : {}}
+                    >
+                      {shift && (
+                        <div className="weekly-shift-content">
+                          <span 
+                            className="weekly-shift-badge"
+                            style={{ backgroundColor: shiftInfo?.color, color: shiftInfo?.textColor }}
+                          >
+                            {shift}
+                          </span>
+                          {tierConfig && (
+                            <span className="weekly-shift-desc">{tierConfig.description}</span>
+                          )}
+                          {shift === 'PC' && <span className="weekly-shift-desc">Post-Call</span>}
+                          {shift === 'AL' && <span className="weekly-shift-desc">Leave</span>}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
+            
+            {/* On-Call Summary Row */}
+            <div className="weekly-row summary-row">
+              <div className="weekly-cell doctor-col">
+                <span className="weekly-summary-label">On-Call Team</span>
+              </div>
+              {currentWeekDays.map((day, idx) => {
+                if (!day) {
+                  return <div key={idx} className="weekly-cell shift-col empty"></div>;
+                }
+                const summary = getDailySummary(day.date);
+                return (
+                  <div key={idx} className={`weekly-cell shift-col summary ${day.isWeekend ? 'weekend' : ''}`}>
+                    <div className="weekly-oncall-list">
+                      {enabledTiers.map(tier => {
+                        const doc = summary[tier];
+                        const config = HO_TIERS_CONFIG[tier];
+                        return (
+                          <div key={tier} className="weekly-oncall-item">
+                            <span className="oncall-tier" style={{ color: config.color }}>{tier}:</span>
+                            <span className="oncall-name">{doc ? doc.name.split(' ')[0] : '-'}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
       
       {/* Stats Summary */}
       <div className="roster-stats-section">
@@ -3207,6 +3386,252 @@ const styles = `
   }
   
   .stats-col.highlight { color: #355E52; font-weight: 600; }
+  
+  /* Roster View Toggle */
+  .roster-view-toggle {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    margin-bottom: 20px;
+  }
+  
+  /* Weekly Roster View */
+  .weekly-roster-container {
+    background: #FFFFFF;
+    border-radius: 12px;
+    padding: 24px;
+    border: 1px solid #E5E7EB;
+    margin-bottom: 24px;
+  }
+  
+  .week-navigator {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+    margin-bottom: 24px;
+  }
+  
+  .week-nav-btn {
+    width: 40px;
+    height: 40px;
+    border-radius: 8px;
+    background: #F8F9FA;
+    border: 1px solid #E5E7EB;
+    color: #6B7280;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+  }
+  
+  .week-nav-btn:hover:not(:disabled) {
+    background: #EDF1F5;
+    color: #3A5A7A;
+    border-color: #3A5A7A;
+  }
+  
+  .week-nav-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+  
+  .week-label {
+    text-align: center;
+    min-width: 160px;
+  }
+  
+  .week-title {
+    display: block;
+    font-size: 16px;
+    font-weight: 600;
+    color: #1F2933;
+    margin-bottom: 2px;
+  }
+  
+  .week-dates {
+    display: block;
+    font-size: 13px;
+    color: #6B7280;
+  }
+  
+  .weekly-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  
+  .weekly-header-row, .weekly-row {
+    display: flex;
+    gap: 2px;
+  }
+  
+  .weekly-cell {
+    padding: 12px 8px;
+    text-align: center;
+  }
+  
+  .weekly-cell.doctor-col {
+    flex: 0 0 180px;
+    min-width: 180px;
+    text-align: left;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: #F8F9FA;
+    border-radius: 6px;
+  }
+  
+  .weekly-cell.day-col, .weekly-cell.shift-col {
+    flex: 1;
+    min-width: 100px;
+    border-radius: 6px;
+  }
+  
+  .weekly-header-row .weekly-cell {
+    background: #F8F9FA;
+    font-weight: 600;
+  }
+  
+  .weekly-header-row .day-col {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  
+  .weekly-day-name {
+    font-size: 12px;
+    color: #6B7280;
+    text-transform: uppercase;
+  }
+  
+  .weekly-day-num {
+    font-size: 18px;
+    font-weight: 700;
+    color: #1F2933;
+  }
+  
+  .weekly-header-row .day-col.weekend {
+    background: #FBF6E6;
+  }
+  
+  .weekly-header-row .day-col.weekend .weekly-day-num {
+    color: #7A5A1F;
+  }
+  
+  .weekly-header-row .day-col.holiday {
+    background: #F6EAEA;
+  }
+  
+  .weekly-header-row .day-col.empty {
+    background: #FAFAFA;
+  }
+  
+  .weekly-row .shift-col {
+    background: #FFFFFF;
+    border: 1px solid #E5E7EB;
+    min-height: 70px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  
+  .weekly-row .shift-col.weekend {
+    background: #FFFBEB;
+    border-color: #D6B656;
+  }
+  
+  .weekly-row .shift-col.empty {
+    background: #FAFAFA;
+    border-color: #F0F0F0;
+  }
+  
+  .weekly-doc-avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    font-weight: 700;
+    color: white;
+  }
+  
+  .weekly-doc-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  
+  .weekly-doc-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: #1F2933;
+  }
+  
+  .weekly-shift-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+  }
+  
+  .weekly-shift-badge {
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 700;
+  }
+  
+  .weekly-shift-desc {
+    font-size: 10px;
+    color: #6B7280;
+  }
+  
+  .weekly-row.summary-row .doctor-col {
+    background: #EDF1F5;
+  }
+  
+  .weekly-summary-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #3A5A7A;
+    text-transform: uppercase;
+  }
+  
+  .weekly-row.summary-row .shift-col {
+    background: #F8F9FA;
+  }
+  
+  .weekly-row.summary-row .shift-col.summary {
+    min-height: auto;
+    padding: 10px 6px;
+  }
+  
+  .weekly-oncall-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    width: 100%;
+  }
+  
+  .weekly-oncall-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+  }
+  
+  .oncall-tier {
+    font-weight: 600;
+    min-width: 30px;
+  }
+  
+  .oncall-name {
+    color: #1F2933;
+  }
   
   @media (max-width: 768px) {
     .header-content { flex-direction: column; gap: 16px; }
