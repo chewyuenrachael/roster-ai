@@ -2109,6 +2109,13 @@ const styles = `
     transition: all 0.2s;
   }
   
+  .month-nav svg {
+    width: 24px;
+    height: 24px;
+    stroke: currentColor;
+    stroke-width: 2;
+  }
+  
   .month-nav:hover { background: #EDF1F5; color: #3A5A7A; }
   
   .current-month {
