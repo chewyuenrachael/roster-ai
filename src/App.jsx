@@ -2103,7 +2103,7 @@ const styles = `
     border-radius: 10px;
     background: #FFFFFF;
     border: 1px solid #E5E7EB;
-    color: #6B7280;
+    color: #1F2933;
     cursor: pointer;
     display: flex; align-items: center; justify-content: center;
     transition: all 0.2s;
@@ -2116,7 +2116,7 @@ const styles = `
     stroke-width: 2;
   }
   
-  .month-nav:hover { background: #EDF1F5; color: #3A5A7A; }
+  .month-nav:hover { background: #EDF1F5; color: #1F2933; }
   
   .current-month {
     font-size: 32px; font-weight: 700;
