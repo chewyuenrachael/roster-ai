@@ -2049,13 +2049,14 @@ const styles = `
   .header-content {
     max-width: 1600px;
     margin: 0 auto;
-    padding: 16px 24px;
+    padding: 16px 32px;
     display: flex;
     justify-content: space-between;
     align-items: center;
+    gap: 40px;
   }
   
-  .logo { display: flex; align-items: center; gap: 14px; }
+  .logo { display: flex; align-items: center; gap: 14px; flex-shrink: 0; }
   
   .logo-icon {
     width: 48px; height: 48px;
