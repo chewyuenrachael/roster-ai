@@ -1933,9 +1933,17 @@ export default function RosterApp() {
       <main className="main-content">
         <div className="dashboard">
           <div className="month-selector">
-            <button className="month-nav" onClick={() => navigateMonth('prev')}><ChevronLeft size={24} /></button>
+            <button className="month-nav" onClick={() => navigateMonth('prev')}>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#374151" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="15 18 9 12 15 6"></polyline>
+              </svg>
+            </button>
             <h2 className="current-month">{MONTHS[month]} {year}</h2>
-            <button className="month-nav" onClick={() => navigateMonth('next')}><ChevronRight size={24} /></button>
+            <button className="month-nav" onClick={() => navigateMonth('next')}>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#374151" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="9 18 15 12 9 6"></polyline>
+              </svg>
+            </button>
           </div>
           
           <div className="status-bar">
@@ -2103,20 +2111,23 @@ const styles = `
     border-radius: 10px;
     background: #FFFFFF;
     border: 1px solid #E5E7EB;
-    color: #1F2933;
+    color: #374151;
     cursor: pointer;
     display: flex; align-items: center; justify-content: center;
     transition: all 0.2s;
+    padding: 0;
   }
   
   .month-nav svg {
     width: 24px;
     height: 24px;
-    stroke: currentColor;
-    stroke-width: 2;
+    display: block;
   }
   
-  .month-nav:hover { background: #EDF1F5; color: #1F2933; }
+  .month-nav:hover { 
+    background: #EDF1F5; 
+    border-color: #3A5A7A;
+  }
   
   .current-month {
     font-size: 32px; font-weight: 700;
