@@ -18,18 +18,71 @@ Currently, hospital shift allocation is a painful manual process:
 
 **RosterAI automates this entire process** — doctors input their preferences, and the AI generates a fair roster in seconds.
 
+---
+
 ## ✨ Features
 
-### For Doctors
-- **📅 Mark Availability** — Set Annual Leave (AL), Call Blocks (CB), and Call Requests (CR) on an interactive calendar
-- **🎯 Leave Maximization** — Strategic tips to maximize consecutive days off (e.g., CR Thursday → PC Friday → CB Weekend → AL Monday)
-- **📊 Points Tracking** — View your cumulative call points and see how the fair allocation works
+### 📅 Handover View (`/today`)
+Quick access to "Who's on call today/tomorrow?" — the most frequently used feature.
 
-### For Roster Managers
-- **🤖 AI-Powered Allocation** — Automatically generates fair rosters based on cumulative points
-- **⚖️ Fair Distribution** — Doctors with lowest points get assigned calls first
-- **👥 Team-Based View** — See all doctors grouped by their teams (ESU, NES, VAS, etc.)
-- **📈 Statistics Dashboard** — Track call distribution and points leaderboard
+```
+┌─────────────────────────────────────────┐
+│  📅 TODAY - Mon, 6 Jan 2025            │
+├─────────────────────────────────────────┤
+│  🔴 HO1 (Active)     Dr. Sarah Chen    │
+│  🟠 HO2 (Passive)    Dr. Marcus Wong   │
+│  🟡 HO3 (Handover)   Dr. Emily Tan     │
+│  🟢 HO4              Dr. Raj Sharma    │
+├─────────────────────────────────────────┤
+│  😴 Post-Call: Dr. Jessica Lim         │
+│  🏖️ On Leave: Dr. David Ng            │
+└─────────────────────────────────────────┘
+          ⬇️ HANDOVER TO ⬇️
+┌─────────────────────────────────────────┐
+│  📅 TOMORROW - Tue, 7 Jan 2025         │
+│  ...                                    │
+└─────────────────────────────────────────┘
+```
+
+- **Today & Tomorrow view** — See who to handover to
+- **Navigate any date** — Browse past and future rosters
+- **Copy to clipboard** — One tap to share via message
+- **Search by doctor** — Find any doctor's upcoming calls
+
+### 📋 My Calls (`/mycalls`)
+View any doctor's complete call schedule for the month.
+
+- **Expandable doctor cards** — Tap to see full details
+- **Statistics breakdown** — Total calls, weekday/weekend split, calls per HO tier
+- **Timeline view** — All upcoming calls in chronological order
+- **Copy schedule** — Share via clipboard
+
+### 🏥 Ward Coverage (`/coverage`)
+See which wards each on-call tier covers and their responsibilities.
+
+| HO Tier | Wards Covered | Responsibilities |
+|---------|---------------|------------------|
+| HO1 | ED, Surgical ICU, HDU | New admissions, ICU reviews, Trauma calls |
+| HO2 | Wards 45-48 | Ward reviews, Nurse escalations, IV cannulations |
+| HO3 | Wards 41-44 | Evening handovers, Discharge summaries, Leaves 10pm |
+| HO4 | Day Surgery, Clinics | Elective support, Clinic overflow |
+
+### 💊 Antibiotic Guidelines (`/abx`)
+Quick reference antibiotic guidelines by body system.
+
+- **Systems**: Respiratory, Intra-abdominal, Skin & Soft Tissue, Urinary, CNS, Sepsis
+- **Severity tiers**: Mild → Moderate → Severe regimens
+- **Expandable cards** — Tap condition to see full guidelines
+
+### ⚙️ Configurable HO Tiers (HO1-HO11)
+Different hospitals use different call structures. RosterAI supports 1-11 HO tiers, each configurable with:
+
+- Custom name/description
+- Post-call entitlement (Yes/No)
+- Point multiplier
+- Required staffing per day
+
+---
 
 ## 📋 Call Points System
 
@@ -42,22 +95,29 @@ Weekend rounds are worth more points to compensate for the inconvenience:
 | **Saturday** | **2.5** | **1.25** |
 | Sunday | 2.0 | 1.0 |
 
+---
+
 ## 🏷️ Call Types
 
-| Type | Description |
-|------|-------------|
-| **HO1** | Active On-Call — Reviews new cases with on-call team |
-| **HO2** | Passive On-Call — First line for ward nurse escalations |
-| **HO3** | Handover HO — Reviews handovers, leaves at 10pm, no post-call |
-| **PC** | Post-Call — Rest day after HO1/HO2 duty |
+| Type | Description | Post-Call? |
+|------|-------------|------------|
+| **HO1** | Active On-Call — Reviews new cases with on-call team | ✅ Yes |
+| **HO2** | Passive On-Call — First line for ward nurse escalations | ✅ Yes |
+| **HO3** | Handover HO — Reviews handovers, leaves at 10pm | ❌ No |
+| **HO4** | Additional coverage (configurable) | Configurable |
+| **PC** | Post-Call — Rest day after HO1/HO2 duty | — |
+
+---
 
 ## 🚫 Request Types
 
-| Type | Description | Use Case |
+| Type | Description | Priority |
 |------|-------------|----------|
-| **AL** | Annual Leave | Day off work |
-| **CB** | Call Block | "I don't want to be on call this day" |
-| **CR** | Call Request | "I want to be on call this day" |
+| **AL** | Annual Leave — Day off work | 1 (Highest) |
+| **CB** | Call Block — "I don't want to be on call this day" | 2 |
+| **CR** | Call Request — "I want to be on call this day" | 3 |
+
+---
 
 ## 💡 Leave Maximization Strategy
 
@@ -74,6 +134,8 @@ Monday onwards: Annual Leave (AL)
    
 = Maximum consecutive days off! 🎉
 ```
+
+---
 
 ## 🚀 Getting Started
 
@@ -106,12 +168,16 @@ Open [http://localhost:5173](http://localhost:5173) in your browser.
 npm run build
 ```
 
+---
+
 ## 🛠️ Tech Stack
 
 - **Frontend**: React 18
 - **Build Tool**: Vite
 - **Icons**: Lucide React
 - **Styling**: CSS-in-JS (embedded styles)
+
+---
 
 ## 📁 Project Structure
 
@@ -128,8 +194,15 @@ roster-ai/
 └── README.md
 ```
 
+---
+
 ## 🗺️ Roadmap
 
+- [x] Handover View (Today/Tomorrow)
+- [x] My Calls (Doctor schedule lookup)
+- [x] Ward Coverage view
+- [x] Antibiotic Guidelines reference
+- [x] Configurable HO tiers (1-11)
 - [ ] User authentication (login per doctor)
 - [ ] Database integration (persist rosters)
 - [ ] Export to PDF/Excel
@@ -138,6 +211,8 @@ roster-ai/
 - [ ] Mobile-responsive design improvements
 - [ ] Historical roster viewing
 - [ ] Integration with hospital systems
+
+---
 
 ## 🤝 Contributing
 
@@ -149,9 +224,13 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 4. Push to the branch (`git push origin feature/AmazingFeature`)
 5. Open a Pull Request
 
+---
+
 ## 📄 License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+---
 
 ## 🙏 Acknowledgments
 
