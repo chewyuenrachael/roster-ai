@@ -1470,7 +1470,9 @@ const MonthlyRosterView = ({ doctors, allocation, callPoints, month, year, onBac
               onClick={() => setCurrentWeek(w => Math.max(0, w - 1))}
               disabled={currentWeek === 0}
             >
-              <ChevronLeft size={20} />
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#374151" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="15 18 9 12 15 6"></polyline>
+              </svg>
             </button>
             <div className="week-label">
               <span className="week-title">Week {currentWeek + 1} of {weeks.length}</span>
@@ -1483,7 +1485,9 @@ const MonthlyRosterView = ({ doctors, allocation, callPoints, month, year, onBac
               onClick={() => setCurrentWeek(w => Math.min(weeks.length - 1, w + 1))}
               disabled={currentWeek === weeks.length - 1}
             >
-              <ChevronRight size={20} />
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#374151" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="9 18 15 12 9 6"></polyline>
+              </svg>
             </button>
           </div>
           
@@ -3419,19 +3423,24 @@ const styles = `
     width: 40px;
     height: 40px;
     border-radius: 8px;
-    background: #F8F9FA;
+    background: #FFFFFF;
     border: 1px solid #E5E7EB;
-    color: #6B7280;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
     transition: all 0.2s;
+    padding: 0;
+  }
+  
+  .week-nav-btn svg {
+    width: 20px;
+    height: 20px;
+    display: block;
   }
   
   .week-nav-btn:hover:not(:disabled) {
     background: #EDF1F5;
-    color: #3A5A7A;
     border-color: #3A5A7A;
   }
   
