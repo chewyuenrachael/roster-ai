@@ -434,23 +434,27 @@ const HandoverView = ({ doctors, allocation, month, year, onBack }) => {
       </div>
       
       <div className="date-navigator">
-        <button onClick={() => {
+        <button className="date-nav-btn" onClick={() => {
           const prev = new Date(selectedDate);
           prev.setDate(prev.getDate() - 1);
           setSelectedDate(prev);
         }}>
-          <ChevronLeft size={20} />
+          <svg className="nav-arrow" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#374151" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="15 18 9 12 15 6"></polyline>
+          </svg>
         </button>
         <div className="current-selection">
           <span className="nav-label">Viewing from</span>
           <span className="nav-date">{formatDateShort(selectedDate)}</span>
         </div>
-        <button onClick={() => {
+        <button className="date-nav-btn" onClick={() => {
           const next = new Date(selectedDate);
           next.setDate(next.getDate() + 1);
           setSelectedDate(next);
         }}>
-          <ChevronRight size={20} />
+          <svg className="nav-arrow" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#374151" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="9 18 15 12 9 6"></polyline>
+          </svg>
         </button>
         <button 
           className="today-btn"
@@ -2435,6 +2439,28 @@ const styles = `
     color: #6B7280; cursor: pointer;
     display: flex; align-items: center; justify-content: center;
     transition: all 0.2s;
+    padding: 0;
+  }
+  
+  .date-nav-btn {
+    width: 40px !important;
+    height: 40px !important;
+    padding: 0 !important;
+    background: #FFFFFF !important;
+    border: 1px solid #E5E7EB !important;
+  }
+  
+  .date-nav-btn:hover {
+    background: #F8F9FA !important;
+    border-color: #3A5A7A !important;
+  }
+  
+  .nav-arrow {
+    width: 20px !important;
+    height: 20px !important;
+    display: block !important;
+    stroke: #374151 !important;
+    fill: none !important;
   }
   
   .date-navigator button:hover { background: #F8F9FA; color: #1F2933; border-color: #3A5A7A; }
