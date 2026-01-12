@@ -1,5 +1,8 @@
-import React, { useState, useMemo } from 'react';
-import { Calendar, Users, CheckCircle, AlertCircle, ChevronLeft, ChevronRight, Sparkles, Eye, TrendingUp, Award, Shield, Zap, Info, Filter, BarChart3, Lightbulb, Search, Copy, ArrowDown, Clock, UserCheck, Coffee, Pill, Building2, CalendarDays, User } from 'lucide-react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { Calendar, Users, CheckCircle, AlertCircle, ChevronLeft, ChevronRight, Sparkles, Eye, TrendingUp, Award, Shield, Zap, Info, Filter, BarChart3, Lightbulb, Search, Copy, ArrowDown, Clock, UserCheck, Coffee, Pill, Building2, CalendarDays, User, LogIn, LogOut, Settings, Database } from 'lucide-react';
+import { useAuthContext } from './contexts/AuthContext';
+import { db, isSupabaseConfigured } from './lib/supabase';
+import AuthModal from './components/AuthModal';
 
 // ============ CONFIGURATION ============
 
@@ -1764,13 +1767,81 @@ export default function RosterApp() {
   const [selectedDoctor, setSelectedDoctor] = useState(null);
   const [month, setMonth] = useState(7);
   const [year, setYear] = useState(2025);
-  const [doctors] = useState(INITIAL_DOCTORS);
+  const [doctors, setDoctors] = useState(INITIAL_DOCTORS);
   const [requests, setRequests] = useState({});
   const [allocation, setAllocation] = useState({});
   const [callPoints, setCallPoints] = useState({});
   const [callCounts, setCallCounts] = useState({});
   const [isGenerating, setIsGenerating] = useState(false);
   const [hasGenerated, setHasGenerated] = useState(false);
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [dataLoaded, setDataLoaded] = useState(false);
+  
+  // Auth context
+  const { user, doctorProfile, signIn, signUp, signOut, isAuthenticated, isRosterAdmin, isConfigured } = useAuthContext();
+  
+  // Load data from Supabase on mount
+  useEffect(() => {
+    const loadData = async () => {
+      if (!isSupabaseConfigured()) {
+        setDataLoaded(true);
+        return;
+      }
+      
+      try {
+        // Load doctors
+        const { data: doctorsData } = await db.doctors.getAll();
+        if (doctorsData && doctorsData.length > 0) {
+          // Transform Supabase data to match app format
+          const transformedDoctors = doctorsData.map(d => ({
+            id: d.id,
+            name: d.name,
+            team: d.team_key,
+            cumulativePoints: d.cumulative_points || 0,
+            email: d.email
+          }));
+          setDoctors(transformedDoctors);
+        }
+        
+        // Load existing roster for current month
+        const { data: rosterData } = await db.rosters.getByMonth(year, month);
+        if (rosterData) {
+          setAllocation(rosterData.allocation || {});
+          setCallPoints(rosterData.call_points || {});
+          setHasGenerated(true);
+        }
+        
+        // Load requests for current month
+        const { data: requestsData } = await db.requests.getByMonth(year, month);
+        if (requestsData) {
+          // Transform to { doctorId: { day: requestType } }
+          const grouped = {};
+          requestsData.forEach(req => {
+            if (!grouped[req.doctor_id]) grouped[req.doctor_id] = {};
+            const day = new Date(req.date).getDate();
+            grouped[req.doctor_id][day] = req.request_type;
+          });
+          setRequests(grouped);
+        }
+      } catch (error) {
+        console.error('Error loading data:', error);
+      } finally {
+        setDataLoaded(true);
+      }
+    };
+    
+    loadData();
+  }, [year, month]);
+  
+  // Handle authentication
+  const handleAuth = async (mode, credentials) => {
+    if (mode === 'login') {
+      return await signIn(credentials.email, credentials.password);
+    } else {
+      return await signUp(credentials.email, credentials.password, { name: credentials.name });
+    }
+  };
   
   const getRequestSummary = (docId) => {
     const docReqs = requests[docId] || {};
@@ -1792,6 +1863,34 @@ export default function RosterApp() {
     setCallCounts(result.callCounts);
     setHasGenerated(true);
     setIsGenerating(false);
+    
+    // Save to Supabase if configured
+    if (isSupabaseConfigured()) {
+      try {
+        await db.rosters.save(year, month, result.allocation, result.callPoints, 'draft');
+        console.log('✅ Roster saved to database');
+      } catch (error) {
+        console.error('Error saving roster:', error);
+      }
+    }
+  };
+  
+  const handlePublishRoster = async () => {
+    if (!isSupabaseConfigured()) {
+      alert('Database not configured. Cannot publish roster.');
+      return;
+    }
+    
+    setIsSaving(true);
+    try {
+      await db.rosters.publish(year, month);
+      alert('✅ Roster published successfully!');
+    } catch (error) {
+      console.error('Error publishing roster:', error);
+      alert('Failed to publish roster');
+    } finally {
+      setIsSaving(false);
+    }
   };
   
   const navigateMonth = (direction) => {
@@ -1935,8 +2034,47 @@ export default function RosterApp() {
               <Pill size={18} /><span>Antibiotics</span>
             </button>
           </nav>
+          
+          {/* User Menu */}
+          <div className="user-menu">
+            {!isConfigured && (
+              <div className="db-status offline" title="Database not connected - Running in demo mode">
+                <Database size={16} />
+                <span>Demo Mode</span>
+              </div>
+            )}
+            {isConfigured && !isAuthenticated && (
+              <button className="login-btn" onClick={() => setShowAuthModal(true)}>
+                <LogIn size={18} />
+                <span>Sign In</span>
+              </button>
+            )}
+            {isAuthenticated && (
+              <div className="user-profile">
+                <div className="user-avatar">
+                  {doctorProfile?.name?.charAt(0) || user?.email?.charAt(0) || 'U'}
+                </div>
+                <div className="user-info">
+                  <span className="user-name">{doctorProfile?.name || user?.email}</span>
+                  {doctorProfile?.role && (
+                    <span className="user-role">{doctorProfile.role}</span>
+                  )}
+                </div>
+                <button className="logout-btn" onClick={signOut} title="Sign out">
+                  <LogOut size={16} />
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </header>
+      
+      {/* Auth Modal */}
+      <AuthModal 
+        isOpen={showAuthModal} 
+        onClose={() => setShowAuthModal(false)}
+        onAuth={handleAuth}
+      />
       
       <main className="main-content">
         <div className="dashboard">
@@ -2081,6 +2219,118 @@ const styles = `
   .logo-text span { font-size: 12px; color: #64748B; }
   
   .header-nav { display: flex; gap: 6px; flex-wrap: wrap; }
+  
+  /* User Menu Styles */
+  .user-menu {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-shrink: 0;
+  }
+  
+  .db-status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 500;
+  }
+  
+  .db-status.offline {
+    background: #FEF3C7;
+    color: #92400E;
+    border: 1px solid #FCD34D;
+  }
+  
+  .db-status.online {
+    background: #D1FAE5;
+    color: #065F46;
+    border: 1px solid #6EE7B7;
+  }
+  
+  .login-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    background: linear-gradient(135deg, #0F766E 0%, #14B8A6 100%);
+    border: none;
+    border-radius: 8px;
+    color: #FFFFFF;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-family: inherit;
+  }
+  
+  .login-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(15, 118, 110, 0.3);
+  }
+  
+  .user-profile {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 12px 6px 6px;
+    background: #F8FAFC;
+    border: 1px solid #E2E8F0;
+    border-radius: 10px;
+  }
+  
+  .user-avatar {
+    width: 36px;
+    height: 36px;
+    background: linear-gradient(135deg, #0F766E 0%, #14B8A6 100%);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #FFFFFF;
+    font-weight: 600;
+    font-size: 14px;
+  }
+  
+  .user-info {
+    display: flex;
+    flex-direction: column;
+  }
+  
+  .user-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: #1E293B;
+  }
+  
+  .user-role {
+    font-size: 11px;
+    color: #64748B;
+    text-transform: capitalize;
+  }
+  
+  .logout-btn {
+    width: 28px;
+    height: 28px;
+    background: #FFFFFF;
+    border: 1px solid #E2E8F0;
+    border-radius: 6px;
+    color: #64748B;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    margin-left: 4px;
+  }
+  
+  .logout-btn:hover {
+    background: #FEE2E2;
+    border-color: #FECACA;
+    color: #DC2626;
+  }
   
   .nav-btn {
     display: flex; align-items: center; gap: 6px;
