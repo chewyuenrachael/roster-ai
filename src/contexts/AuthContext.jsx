@@ -58,8 +58,24 @@ export function AuthProvider({ children }) {
     if (!isSupabaseConfigured() || !email) return;
 
     try {
-      const { data: doctors } = await db.doctors.getAll();
+      console.log('🔍 Fetching doctor profile for:', email);
+      const { data: doctors, error } = await db.doctors.getAll();
+      
+      if (error) {
+        console.error('❌ Error fetching doctors:', error);
+        return;
+      }
+      
+      console.log('📋 All doctors from DB:', doctors);
       const profile = doctors?.find(d => d.email === email);
+      console.log('👤 Found profile:', profile);
+      
+      if (profile) {
+        console.log('✅ Role:', profile.role);
+      } else {
+        console.log('⚠️ No doctor profile found for this email');
+      }
+      
       setDoctorProfile(profile || null);
     } catch (err) {
       console.error('Error fetching doctor profile:', err);
@@ -90,10 +106,18 @@ export function AuthProvider({ children }) {
 
   // Sign out
   const signOut = async () => {
+    console.log('🚪 Signing out...');
     setError(null);
-    const { error } = await auth.signOut();
-    if (error) {
-      setError(error.message);
+    try {
+      const { error } = await auth.signOut();
+      if (error) {
+        console.error('❌ Sign out error:', error);
+        setError(error.message);
+      } else {
+        console.log('✅ Signed out successfully');
+      }
+    } catch (err) {
+      console.error('❌ Sign out exception:', err);
     }
     setUser(null);
     setDoctorProfile(null);

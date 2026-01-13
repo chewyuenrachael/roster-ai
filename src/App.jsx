@@ -3,6 +3,7 @@ import { Calendar, Users, CheckCircle, AlertCircle, ChevronLeft, ChevronRight, S
 import { useAuthContext } from './contexts/AuthContext';
 import { db, isSupabaseConfigured } from './lib/supabase';
 import AuthModal from './components/AuthModal';
+import AdminPanel from './components/AdminPanel';
 
 // ============ CONFIGURATION ============
 
@@ -1633,23 +1634,82 @@ const MonthlyRosterView = ({ doctors, allocation, callPoints, month, year, onBac
 const DoctorAvailabilityView = ({ doctor, month, year, requests, setRequests, onBack }) => {
   const days = generateMonthDays(year, month);
   const [selectedType, setSelectedType] = useState('AL');
+  const [saving, setSaving] = useState(false);
+  const [saveStatus, setSaveStatus] = useState(null); // 'saved' or 'error'
   
   const docRequests = requests[doctor.id] || {};
   const cbCount = Object.values(docRequests).filter(r => r === 'CB').length;
   const crCount = Object.values(docRequests).filter(r => r === 'CR').length;
   const alCount = Object.values(docRequests).filter(r => r === 'AL').length;
   
+  // Save request to Supabase
+  const saveRequestToDb = async (dayNum, requestType, isRemoving) => {
+    if (!isSupabaseConfigured()) return;
+    
+    setSaving(true);
+    setSaveStatus(null);
+    
+    try {
+      const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
+      
+      if (isRemoving) {
+        // Delete the request - we need to find it first by doctor_id and date
+        const { data: existingReqs } = await db.requests.getByMonth(year, month);
+        const existingReq = existingReqs?.find(r => 
+          r.doctor_id === doctor.id && r.date === dateStr
+        );
+        if (existingReq) {
+          await db.requests.delete(existingReq.id);
+        }
+      } else {
+        // Create or update the request
+        // First check if there's an existing request for this date
+        const { data: existingReqs } = await db.requests.getByMonth(year, month);
+        const existingReq = existingReqs?.find(r => 
+          r.doctor_id === doctor.id && r.date === dateStr
+        );
+        
+        if (existingReq) {
+          await db.requests.update(existingReq.id, { request_type: requestType });
+        } else {
+          await db.requests.create({
+            doctor_id: doctor.id,
+            date: dateStr,
+            request_type: requestType,
+            status: 'pending'
+          });
+        }
+      }
+      
+      setSaveStatus('saved');
+      setTimeout(() => setSaveStatus(null), 2000);
+    } catch (error) {
+      console.error('Error saving request:', error);
+      setSaveStatus('error');
+      setTimeout(() => setSaveStatus(null), 3000);
+    } finally {
+      setSaving(false);
+    }
+  };
+  
   const toggleDay = (dayNum) => {
+    const docReq = requests[doctor.id] || {};
+    const current = docReq[dayNum];
+    const isRemoving = current === selectedType;
+    
+    // Update local state immediately for responsive UI
     setRequests(prev => {
       const docReq = prev[doctor.id] || {};
-      const current = docReq[dayNum];
-      if (current === selectedType) {
+      if (isRemoving) {
         const newDocReq = { ...docReq };
         delete newDocReq[dayNum];
         return { ...prev, [doctor.id]: newDocReq };
       }
       return { ...prev, [doctor.id]: { ...docReq, [dayNum]: selectedType } };
     });
+    
+    // Save to database in background
+    saveRequestToDb(dayNum, selectedType, isRemoving);
   };
   
   const firstDayOffset = new Date(year, month, 1).getDay();
@@ -1704,6 +1764,13 @@ const DoctorAvailabilityView = ({ doctor, month, year, requests, setRequests, on
           <div className="summary-item"><span>CB:</span><strong>{cbCount}</strong></div>
           <div className="summary-item"><span>CR:</span><strong>{crCount}</strong></div>
         </div>
+        {isSupabaseConfigured() && (
+          <div className={`save-status ${saving ? 'saving' : ''} ${saveStatus || ''}`}>
+            {saving && <><span className="save-spinner"></span> Saving...</>}
+            {saveStatus === 'saved' && <><CheckCircle size={14} /> Saved</>}
+            {saveStatus === 'error' && <><AlertCircle size={14} /> Error saving</>}
+          </div>
+        )}
       </div>
       
       <div className="calendar-grid">
@@ -1906,6 +1973,17 @@ export default function RosterApp() {
   };
   
   // View routing
+  if (currentView === 'admin') {
+    return (
+      <div className="app-container">
+        <style>{styles}</style>
+        <AdminPanel
+          onBack={() => setCurrentView('dashboard')}
+        />
+      </div>
+    );
+  }
+  
   if (currentView === 'availability' && selectedDoctor) {
     return (
       <div className="app-container">
@@ -2033,6 +2111,11 @@ export default function RosterApp() {
             <button className={`nav-btn abx-nav ${currentView === 'abx' ? 'active' : ''}`} onClick={() => setCurrentView('abx')}>
               <Pill size={18} /><span>Antibiotics</span>
             </button>
+            {(doctorProfile?.role === 'admin' || doctorProfile?.role === 'roster_admin') && (
+              <button className={`nav-btn admin-nav ${currentView === 'admin' ? 'active' : ''}`} onClick={() => setCurrentView('admin')}>
+                <Settings size={18} /><span>Admin</span>
+              </button>
+            )}
           </nav>
           
           {/* User Menu */}
@@ -2045,7 +2128,11 @@ export default function RosterApp() {
             )}
             {isConfigured && !isAuthenticated && (
               <button className="login-btn" onClick={() => setShowAuthModal(true)}>
-                <LogIn size={18} />
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"></path>
+                  <polyline points="10 17 15 12 10 7"></polyline>
+                  <line x1="15" y1="12" x2="3" y2="12"></line>
+                </svg>
                 <span>Sign In</span>
               </button>
             )}
@@ -2061,7 +2148,11 @@ export default function RosterApp() {
                   )}
                 </div>
                 <button className="logout-btn" onClick={signOut} title="Sign out">
-                  <LogOut size={16} />
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#DC2626" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                    <polyline points="16 17 21 12 16 7"></polyline>
+                    <line x1="21" y1="12" x2="9" y2="12"></line>
+                  </svg>
                 </button>
               </div>
             )}
@@ -2312,8 +2403,8 @@ const styles = `
   }
   
   .logout-btn {
-    width: 28px;
-    height: 28px;
+    width: 32px;
+    height: 32px;
     background: #FFFFFF;
     border: 1px solid #E2E8F0;
     border-radius: 6px;
@@ -2324,12 +2415,22 @@ const styles = `
     justify-content: center;
     transition: all 0.2s;
     margin-left: 4px;
+    padding: 0;
+  }
+  
+  .logout-btn svg {
+    width: 16px;
+    height: 16px;
+    display: block;
   }
   
   .logout-btn:hover {
     background: #FEE2E2;
     border-color: #FECACA;
-    color: #DC2626;
+  }
+  
+  .logout-btn:hover svg {
+    stroke: #DC2626;
   }
   
   .nav-btn {
@@ -2639,6 +2740,45 @@ const styles = `
   .summary-item span { font-size: 12px; color: #6B7280; }
   .summary-item strong { font-size: 16px; font-family: 'Inter', sans-serif; color: #3A5A7A; }
   
+  .save-status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    transition: all 0.3s;
+    opacity: 0;
+  }
+  
+  .save-status.saving {
+    opacity: 1;
+    background: #EFF6FF;
+    color: #2563EB;
+  }
+  
+  .save-status.saved {
+    opacity: 1;
+    background: #D1FAE5;
+    color: #065F46;
+  }
+  
+  .save-status.error {
+    opacity: 1;
+    background: #FEE2E2;
+    color: #DC2626;
+  }
+  
+  .save-spinner {
+    width: 14px;
+    height: 14px;
+    border: 2px solid rgba(37, 99, 235, 0.2);
+    border-top-color: #2563EB;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  
   .calendar-grid {
     background: #FFFFFF;
     border-radius: 12px; padding: 24px;
@@ -2891,6 +3031,24 @@ const styles = `
   .nav-btn.abx-nav.active {
     background: #0F766E;
     border-color: #0F766E;
+    color: #FFFFFF;
+  }
+  
+  .nav-btn.admin-nav {
+    background: #FEF3C7;
+    border-color: #FCD34D;
+    color: #92400E;
+  }
+  
+  .nav-btn.admin-nav:hover {
+    background: #FDE68A;
+    border-color: #F59E0B;
+    color: #78350F;
+  }
+  
+  .nav-btn.admin-nav.active {
+    background: #F59E0B;
+    border-color: #F59E0B;
     color: #FFFFFF;
   }
   
