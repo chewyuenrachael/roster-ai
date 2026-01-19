@@ -1,9 +1,11 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Calendar, Users, CheckCircle, AlertCircle, ChevronLeft, ChevronRight, Sparkles, Eye, TrendingUp, Award, Shield, Zap, Info, Filter, BarChart3, Lightbulb, Search, Copy, ArrowDown, Clock, UserCheck, Coffee, Pill, Building2, CalendarDays, User, LogIn, LogOut, Settings, Database } from 'lucide-react';
+import { Calendar, Users, CheckCircle, AlertCircle, ChevronLeft, ChevronRight, Sparkles, Eye, TrendingUp, Award, Shield, Zap, Info, Filter, BarChart3, Lightbulb, Search, Copy, ArrowDown, Clock, UserCheck, Coffee, Pill, Building2, CalendarDays, User, LogIn, LogOut, Settings, Database, Menu, X as XIcon } from 'lucide-react';
 import { useAuthContext } from './contexts/AuthContext';
 import { db, isSupabaseConfigured } from './lib/supabase';
 import AuthModal from './components/AuthModal';
 import AdminPanel from './components/AdminPanel';
+import { useToast } from './components/Toast';
+import ConfirmDialog from './components/ConfirmDialog';
 
 // ============ CONFIGURATION ============
 
@@ -227,7 +229,7 @@ const ShiftBadge = ({ shift, small = false }) => {
 
 // ============ HANDOVER VIEW COMPONENT ============
 
-const HandoverView = ({ doctors, allocation, month, year, onBack }) => {
+const HandoverView = ({ doctors, allocation, month, year, onBack, hasGenerated = false, onGenerateRoster }) => {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [searchQuery, setSearchQuery] = useState('');
   const [copiedToday, setCopiedToday] = useState(false);
@@ -235,6 +237,31 @@ const HandoverView = ({ doctors, allocation, month, year, onBack }) => {
   
   const days = generateMonthDays(year, month);
   const enabledTiers = getEnabledHOTiers();
+  
+  // Show empty state if no roster generated
+  if (!hasGenerated || Object.keys(allocation).length === 0) {
+    return (
+      <div className="handover-view">
+        <div className="handover-header">
+          <button className="back-btn" onClick={onBack}>
+            <ChevronLeft size={20} />
+            <span>Back</span>
+          </button>
+          <div className="header-title">
+            <Clock size={24} />
+            <h2>Handover View</h2>
+          </div>
+        </div>
+        <EmptyState
+          icon={Clock}
+          title="No Roster Generated Yet"
+          description="Generate a roster first to see the on-call schedule and handover information for each day."
+          action={onGenerateRoster}
+          actionLabel="Generate Roster"
+        />
+      </div>
+    );
+  }
   
   const tomorrow = new Date(selectedDate);
   tomorrow.setDate(tomorrow.getDate() + 1);
@@ -536,13 +563,38 @@ const HandoverView = ({ doctors, allocation, month, year, onBack }) => {
 
 // ============ MY CALLS VIEW COMPONENT ============
 
-const MyCallsView = ({ doctors, allocation, month, year, onBack }) => {
+const MyCallsView = ({ doctors, allocation, month, year, onBack, hasGenerated = false, onGenerateRoster }) => {
   const [selectedDoctorId, setSelectedDoctorId] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState('calendar'); // 'calendar' or 'list'
   
   const days = generateMonthDays(year, month);
   const enabledTiers = getEnabledHOTiers();
+  
+  // Show empty state if no roster generated
+  if (!hasGenerated || Object.keys(allocation).length === 0) {
+    return (
+      <div className="my-calls-view">
+        <div className="my-calls-header">
+          <button className="back-btn" onClick={onBack}>
+            <ChevronLeft size={20} />
+            <span>Back</span>
+          </button>
+          <div className="header-title">
+            <Calendar size={24} />
+            <h2>My Calls</h2>
+          </div>
+        </div>
+        <EmptyState
+          icon={Calendar}
+          title="No Roster Generated Yet"
+          description="Generate a roster first to see your assigned on-call shifts for this month."
+          action={onGenerateRoster}
+          actionLabel="Generate Roster"
+        />
+      </div>
+    );
+  }
   
   const filteredDoctors = useMemo(() => {
     if (!searchQuery.trim()) return doctors;
@@ -1827,6 +1879,51 @@ const DoctorCard = ({ doctor, hasSubmitted, requestSummary, onClick }) => (
   </div>
 );
 
+// ============ SKELETON COMPONENTS ============
+
+const DoctorCardSkeleton = () => (
+  <div className="skeleton-card">
+    <div className="skeleton-avatar"></div>
+    <div className="skeleton-content">
+      <div className="skeleton-text medium"></div>
+      <div className="skeleton-text short"></div>
+    </div>
+    <div className="skeleton-badge"></div>
+  </div>
+);
+
+const DoctorGridSkeleton = ({ count = 5 }) => (
+  <div className="team-doctors">
+    {[...Array(count)].map((_, i) => (
+      <DoctorCardSkeleton key={i} />
+    ))}
+  </div>
+);
+
+const LoadingScreen = ({ message = 'Loading...' }) => (
+  <div className="loading-container">
+    <div className="loading-spinner"></div>
+    <p>{message}</p>
+  </div>
+);
+
+// ============ EMPTY STATE COMPONENT ============
+
+const EmptyState = ({ icon: Icon, title, description, action, actionLabel }) => (
+  <div className="empty-state">
+    <div className="empty-state-icon">
+      {Icon && <Icon size={48} />}
+    </div>
+    <h3 className="empty-state-title">{title}</h3>
+    <p className="empty-state-description">{description}</p>
+    {action && actionLabel && (
+      <button className="empty-state-action" onClick={action}>
+        {actionLabel}
+      </button>
+    )}
+  </div>
+);
+
 // ============ MAIN APP ============
 
 export default function RosterApp() {
@@ -1844,9 +1941,15 @@ export default function RosterApp() {
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [dataLoaded, setDataLoaded] = useState(false);
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [confirmDialogConfig, setConfirmDialogConfig] = useState({});
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   
   // Auth context
   const { user, doctorProfile, signIn, signUp, signOut, isAuthenticated, isRosterAdmin, isConfigured } = useAuthContext();
+  
+  // Toast notifications
+  const toast = useToast();
   
   // Load data from Supabase on mount
   useEffect(() => {
@@ -1921,7 +2024,8 @@ export default function RosterApp() {
   
   const submittedCount = Object.keys(requests).filter(id => requests[id] && Object.keys(requests[id]).length > 0).length;
   
-  const handleGenerateRoster = async () => {
+  const doGenerateRoster = async () => {
+    setShowConfirmDialog(false);
     setIsGenerating(true);
     await new Promise(resolve => setTimeout(resolve, 1500));
     const result = generateAIAllocation(doctors, requests, month, year);
@@ -1935,26 +2039,46 @@ export default function RosterApp() {
     if (isSupabaseConfigured()) {
       try {
         await db.rosters.save(year, month, result.allocation, result.callPoints, 'draft');
-        console.log('✅ Roster saved to database');
+        toast.success('Roster generated and saved successfully!');
       } catch (error) {
         console.error('Error saving roster:', error);
+        toast.error('Roster generated but failed to save to database');
       }
+    } else {
+      toast.success('Roster generated successfully!');
+    }
+  };
+  
+  const handleGenerateRoster = () => {
+    // If a roster already exists, ask for confirmation
+    if (hasGenerated) {
+      setConfirmDialogConfig({
+        title: 'Regenerate Roster?',
+        message: 'This will overwrite the existing roster for this month. All current assignments will be replaced with new ones. This action cannot be undone.',
+        confirmText: 'Regenerate',
+        cancelText: 'Cancel',
+        type: 'warning',
+        onConfirm: doGenerateRoster
+      });
+      setShowConfirmDialog(true);
+    } else {
+      doGenerateRoster();
     }
   };
   
   const handlePublishRoster = async () => {
     if (!isSupabaseConfigured()) {
-      alert('Database not configured. Cannot publish roster.');
+      toast.error('Database not configured. Cannot publish roster.');
       return;
     }
     
     setIsSaving(true);
     try {
       await db.rosters.publish(year, month);
-      alert('✅ Roster published successfully!');
+      toast.success('Roster published successfully!');
     } catch (error) {
       console.error('Error publishing roster:', error);
-      alert('Failed to publish roster');
+      toast.error('Failed to publish roster');
     } finally {
       setIsSaving(false);
     }
@@ -2009,7 +2133,9 @@ export default function RosterApp() {
           allocation={allocation}
           month={month}
           year={year}
+          hasGenerated={hasGenerated}
           onBack={() => setCurrentView('dashboard')}
+          onGenerateRoster={handleGenerateRoster}
         />
       </div>
     );
@@ -2040,7 +2166,9 @@ export default function RosterApp() {
           allocation={allocation}
           month={month}
           year={year}
+          hasGenerated={hasGenerated}
           onBack={() => setCurrentView('dashboard')}
+          onGenerateRoster={handleGenerateRoster}
         />
       </div>
     );
@@ -2088,31 +2216,38 @@ export default function RosterApp() {
               <span>Smart Shift Allocation</span>
             </div>
           </div>
-          <nav className="header-nav">
-            <button className={`nav-btn ${currentView === 'dashboard' ? 'active' : ''}`} onClick={() => setCurrentView('dashboard')}>
+          
+          {/* Mobile Menu Toggle */}
+          <button className="mobile-menu-toggle" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
+            {mobileMenuOpen ? <XIcon size={24} /> : <Menu size={24} />}
+          </button>
+          
+          {/* Desktop Navigation */}
+          <nav className={`header-nav ${mobileMenuOpen ? 'mobile-open' : ''}`}>
+            <button className={`nav-btn ${currentView === 'dashboard' ? 'active' : ''}`} onClick={() => { setCurrentView('dashboard'); setMobileMenuOpen(false); }}>
               <Users size={18} /><span>Dashboard</span>
             </button>
             {hasGenerated && (
               <>
-                <button className={`nav-btn roster-nav ${currentView === 'roster' ? 'active' : ''}`} onClick={() => setCurrentView('roster')}>
+                <button className={`nav-btn roster-nav ${currentView === 'roster' ? 'active' : ''}`} onClick={() => { setCurrentView('roster'); setMobileMenuOpen(false); }}>
                   <Calendar size={18} /><span>Roster</span>
                 </button>
-                <button className={`nav-btn handover-nav ${currentView === 'handover' ? 'active' : ''}`} onClick={() => setCurrentView('handover')}>
+                <button className={`nav-btn handover-nav ${currentView === 'handover' ? 'active' : ''}`} onClick={() => { setCurrentView('handover'); setMobileMenuOpen(false); }}>
                   <Clock size={18} /><span>Handover</span>
                 </button>
-                <button className={`nav-btn mycalls-nav ${currentView === 'mycalls' ? 'active' : ''}`} onClick={() => setCurrentView('mycalls')}>
+                <button className={`nav-btn mycalls-nav ${currentView === 'mycalls' ? 'active' : ''}`} onClick={() => { setCurrentView('mycalls'); setMobileMenuOpen(false); }}>
                   <CalendarDays size={18} /><span>My Calls</span>
                 </button>
               </>
             )}
-            <button className={`nav-btn coverage-nav ${currentView === 'coverage' ? 'active' : ''}`} onClick={() => setCurrentView('coverage')}>
+            <button className={`nav-btn coverage-nav ${currentView === 'coverage' ? 'active' : ''}`} onClick={() => { setCurrentView('coverage'); setMobileMenuOpen(false); }}>
               <Building2 size={18} /><span>Coverage</span>
             </button>
-            <button className={`nav-btn abx-nav ${currentView === 'abx' ? 'active' : ''}`} onClick={() => setCurrentView('abx')}>
+            <button className={`nav-btn abx-nav ${currentView === 'abx' ? 'active' : ''}`} onClick={() => { setCurrentView('abx'); setMobileMenuOpen(false); }}>
               <Pill size={18} /><span>Antibiotics</span>
             </button>
             {(doctorProfile?.role === 'admin' || doctorProfile?.role === 'roster_admin') && (
-              <button className={`nav-btn admin-nav ${currentView === 'admin' ? 'active' : ''}`} onClick={() => setCurrentView('admin')}>
+              <button className={`nav-btn admin-nav ${currentView === 'admin' ? 'active' : ''}`} onClick={() => { setCurrentView('admin'); setMobileMenuOpen(false); }}>
                 <Settings size={18} /><span>Admin</span>
               </button>
             )}
@@ -2165,6 +2300,18 @@ export default function RosterApp() {
         isOpen={showAuthModal} 
         onClose={() => setShowAuthModal(false)}
         onAuth={handleAuth}
+      />
+      
+      {/* Confirm Dialog */}
+      <ConfirmDialog
+        isOpen={showConfirmDialog}
+        onClose={() => setShowConfirmDialog(false)}
+        onConfirm={confirmDialogConfig.onConfirm}
+        title={confirmDialogConfig.title}
+        message={confirmDialogConfig.message}
+        confirmText={confirmDialogConfig.confirmText}
+        cancelText={confirmDialogConfig.cancelText}
+        type={confirmDialogConfig.type}
       />
       
       <main className="main-content">
@@ -2235,7 +2382,16 @@ export default function RosterApp() {
           )}
           
           <div className="teams-section">
-            {Object.entries(doctorsByTeam).map(([team, members]) => (
+            {!dataLoaded && isSupabaseConfigured() ? (
+              // Show skeleton loading states
+              <div className="team-group">
+                <div className="team-title-row">
+                  <div className="skeleton-badge"></div>
+                  <span className="team-label">Loading doctors...</span>
+                </div>
+                <DoctorGridSkeleton count={5} />
+              </div>
+            ) : Object.entries(doctorsByTeam).map(([team, members]) => (
               <div key={team} className="team-group">
                 <div className="team-title-row">
                   <ShiftBadge shift={team} />
@@ -2258,6 +2414,47 @@ export default function RosterApp() {
           </div>
         </div>
       </main>
+      
+      {/* Mobile Bottom Navigation */}
+      <nav className="bottom-nav">
+        <button 
+          className={`bottom-nav-btn ${currentView === 'dashboard' ? 'active' : ''}`}
+          onClick={() => setCurrentView('dashboard')}
+        >
+          <Users size={20} />
+          <span>Home</span>
+        </button>
+        {hasGenerated && (
+          <button 
+            className={`bottom-nav-btn ${currentView === 'roster' ? 'active' : ''}`}
+            onClick={() => setCurrentView('roster')}
+          >
+            <Calendar size={20} />
+            <span>Roster</span>
+          </button>
+        )}
+        <button 
+          className={`bottom-nav-btn ${currentView === 'handover' ? 'active' : ''}`}
+          onClick={() => setCurrentView('handover')}
+        >
+          <Clock size={20} />
+          <span>Handover</span>
+        </button>
+        <button 
+          className={`bottom-nav-btn ${currentView === 'mycalls' ? 'active' : ''}`}
+          onClick={() => setCurrentView('mycalls')}
+        >
+          <CalendarDays size={20} />
+          <span>My Calls</span>
+        </button>
+        <button 
+          className={`bottom-nav-btn ${currentView === 'coverage' || currentView === 'abx' || currentView === 'admin' ? 'active' : ''}`}
+          onClick={() => setMobileMenuOpen(true)}
+        >
+          <Menu size={20} />
+          <span>More</span>
+        </button>
+      </nav>
     </div>
   );
 }
@@ -4079,9 +4276,267 @@ const styles = `
     color: #1F2933;
   }
   
+  /* ============ SKELETON LOADING STYLES ============ */
+  
+  @keyframes shimmer {
+    0% { background-position: -200px 0; }
+    100% { background-position: calc(200px + 100%) 0; }
+  }
+  
+  .skeleton {
+    background: linear-gradient(90deg, #F3F4F6 0px, #E5E7EB 40px, #F3F4F6 80px);
+    background-size: 200px 100%;
+    animation: shimmer 1.5s ease-in-out infinite;
+    border-radius: 8px;
+  }
+  
+  .skeleton-card {
+    background: #FFFFFF;
+    border: 1px solid #E5E7EB;
+    border-radius: 12px;
+    padding: 18px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  
+  .skeleton-avatar {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    background: linear-gradient(90deg, #F3F4F6 0px, #E5E7EB 40px, #F3F4F6 80px);
+    background-size: 200px 100%;
+    animation: shimmer 1.5s ease-in-out infinite;
+    flex-shrink: 0;
+  }
+  
+  .skeleton-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  
+  .skeleton-text {
+    height: 14px;
+    border-radius: 4px;
+    background: linear-gradient(90deg, #F3F4F6 0px, #E5E7EB 40px, #F3F4F6 80px);
+    background-size: 200px 100%;
+    animation: shimmer 1.5s ease-in-out infinite;
+  }
+  
+  .skeleton-text.short { width: 60%; }
+  .skeleton-text.medium { width: 80%; }
+  .skeleton-text.long { width: 100%; }
+  
+  .skeleton-badge {
+    width: 50px;
+    height: 24px;
+    border-radius: 6px;
+    background: linear-gradient(90deg, #F3F4F6 0px, #E5E7EB 40px, #F3F4F6 80px);
+    background-size: 200px 100%;
+    animation: shimmer 1.5s ease-in-out infinite;
+  }
+  
+  .skeleton-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 16px;
+  }
+  
+  .loading-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 60px 20px;
+    color: #64748B;
+  }
+  
+  .loading-spinner {
+    width: 40px;
+    height: 40px;
+    border: 3px solid #E5E7EB;
+    border-top-color: #0F766E;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin-bottom: 16px;
+  }
+  
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+  
+  /* ============ EMPTY STATE STYLES ============ */
+  
+  .empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 60px 20px;
+    text-align: center;
+    background: linear-gradient(145deg, #F8FAFC 0%, #F1F5F9 100%);
+    border-radius: 16px;
+    border: 2px dashed #CBD5E1;
+  }
+  
+  .empty-state-icon {
+    width: 80px;
+    height: 80px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #E2E8F0;
+    border-radius: 50%;
+    margin-bottom: 20px;
+    color: #64748B;
+  }
+  
+  .empty-state-title {
+    font-size: 20px;
+    font-weight: 600;
+    color: #1E293B;
+    margin-bottom: 8px;
+  }
+  
+  .empty-state-description {
+    font-size: 14px;
+    color: #64748B;
+    max-width: 360px;
+    line-height: 1.5;
+    margin-bottom: 24px;
+  }
+  
+  .empty-state-action {
+    background: linear-gradient(135deg, #0F766E 0%, #115E59 100%);
+    color: white;
+    border: none;
+    padding: 12px 24px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    box-shadow: 0 2px 8px rgba(15, 118, 110, 0.25);
+  }
+  
+  .empty-state-action:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(15, 118, 110, 0.35);
+  }
+  
+  /* ============ MOBILE NAVIGATION STYLES ============ */
+  
+  .mobile-menu-toggle {
+    display: none;
+    width: 44px;
+    height: 44px;
+    background: #FFFFFF;
+    border: 1px solid #E5E7EB;
+    border-radius: 10px;
+    color: #374151;
+    cursor: pointer;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+  }
+  
+  .mobile-menu-toggle:hover {
+    background: #F3F4F6;
+    border-color: #D1D5DB;
+  }
+  
+  .bottom-nav {
+    display: none;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 70px;
+    background: #FFFFFF;
+    border-top: 1px solid #E5E7EB;
+    padding: 8px 0;
+    padding-bottom: max(8px, env(safe-area-inset-bottom));
+    z-index: 1000;
+    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.08);
+  }
+  
+  .bottom-nav-btn {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    background: none;
+    border: none;
+    color: #94A3B8;
+    cursor: pointer;
+    transition: all 0.2s;
+    padding: 8px 4px;
+  }
+  
+  .bottom-nav-btn span {
+    font-size: 11px;
+    font-weight: 500;
+  }
+  
+  .bottom-nav-btn.active {
+    color: #0F766E;
+  }
+  
+  .bottom-nav-btn:active {
+    transform: scale(0.95);
+  }
+  
   @media (max-width: 768px) {
-    .header-content { flex-direction: column; gap: 16px; }
-    .header-nav { flex-wrap: wrap; justify-content: center; }
+    .header-content { flex-direction: row; gap: 16px; }
+    .header-nav { 
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      backdrop-filter: blur(4px);
+      z-index: 9999;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      padding: 24px;
+    }
+    
+    .header-nav.mobile-open {
+      display: flex;
+    }
+    
+    .header-nav .nav-btn {
+      width: 100%;
+      max-width: 280px;
+      justify-content: center;
+      padding: 14px 24px;
+      font-size: 15px;
+    }
+    
+    .mobile-menu-toggle {
+      display: flex;
+    }
+    
+    .user-menu {
+      display: none;
+    }
+    
+    .bottom-nav {
+      display: flex;
+    }
+    
+    .main-content {
+      padding-bottom: 90px;
+    }
+    
     .status-bar { flex-direction: column; gap: 20px; text-align: center; }
     .team-doctors { grid-template-columns: 1fr; }
     .current-month { font-size: 22px; min-width: auto; }
@@ -4089,5 +4544,17 @@ const styles = `
     .system-grid { grid-template-columns: 1fr; }
     .calls-summary { flex-wrap: wrap; }
     .selected-doctor-card { flex-direction: column; text-align: center; }
+    
+    .logo h1 { font-size: 18px; }
+    .logo span { font-size: 11px; }
+    .logo-icon { width: 36px; height: 36px; }
+  }
+  
+  @media (max-width: 480px) {
+    .month-selector { gap: 12px; }
+    .current-month { font-size: 18px; }
+    .month-nav { width: 40px; height: 40px; }
+    .handover-cards { grid-template-columns: 1fr; }
+    .bottom-nav-btn span { font-size: 10px; }
   }
 `;
