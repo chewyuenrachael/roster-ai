@@ -5,6 +5,7 @@ import {
   RefreshCw, Link2, Database
 } from 'lucide-react';
 import { db, supabase } from '../lib/supabase';
+import ConfirmDialog from './ConfirmDialog';
 
 // Team options
 const TEAMS = [
@@ -33,6 +34,8 @@ const AdminPanel = ({ onBack }) => {
   const [success, setSuccess] = useState(null);
   const [editingDoctor, setEditingDoctor] = useState(null);
   const [showAddForm, setShowAddForm] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [doctorToDelete, setDoctorToDelete] = useState(null);
   const [newDoctor, setNewDoctor] = useState({
     name: '',
     email: '',
@@ -125,23 +128,30 @@ const AdminPanel = ({ onBack }) => {
     }
   };
 
-  // Delete doctor
-  const handleDeleteDoctor = async (id) => {
-    if (!confirm('Are you sure you want to delete this doctor? This cannot be undone.')) {
-      return;
-    }
+  // Delete doctor - show confirmation first
+  const promptDeleteDoctor = (doctor) => {
+    setDoctorToDelete(doctor);
+    setShowDeleteConfirm(true);
+  };
+  
+  // Actually delete the doctor after confirmation
+  const confirmDeleteDoctor = async () => {
+    if (!doctorToDelete) return;
     
     setError(null);
     
     try {
-      const { error } = await db.doctors.delete(id);
+      const { error } = await db.doctors.delete(doctorToDelete.id);
       if (error) throw error;
       
-      setDoctors(prev => prev.filter(d => d.id !== id));
+      setDoctors(prev => prev.filter(d => d.id !== doctorToDelete.id));
       setSuccess('Doctor deleted successfully!');
       setTimeout(() => setSuccess(null), 3000);
     } catch (err) {
       setError(err.message);
+    } finally {
+      setShowDeleteConfirm(false);
+      setDoctorToDelete(null);
     }
   };
 
@@ -435,7 +445,7 @@ const AdminPanel = ({ onBack }) => {
                     <button className="edit-btn" onClick={() => setEditingDoctor({ ...doctor })}>
                       <Edit2 size={16} />
                     </button>
-                    <button className="delete-btn" onClick={() => handleDeleteDoctor(doctor.id)}>
+                    <button className="delete-btn" onClick={() => promptDeleteDoctor(doctor)}>
                       <Trash2 size={16} />
                     </button>
                   </div>
@@ -456,6 +466,18 @@ const AdminPanel = ({ onBack }) => {
           <li><strong>Link users</strong> - When a doctor signs up with matching email, they auto-link</li>
         </ol>
       </div>
+      
+      {/* Delete Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={showDeleteConfirm}
+        onClose={() => { setShowDeleteConfirm(false); setDoctorToDelete(null); }}
+        onConfirm={confirmDeleteDoctor}
+        title="Delete Doctor?"
+        message={`Are you sure you want to delete ${doctorToDelete?.name || 'this doctor'}? This will remove all their data and cannot be undone.`}
+        confirmText="Delete"
+        cancelText="Cancel"
+        type="danger"
+      />
     </div>
   );
 };
