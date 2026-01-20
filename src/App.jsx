@@ -2629,8 +2629,9 @@ export default function RosterApp() {
               </div>
             </div>
             
-            {/* Generate Roster - only for roster_admin or admin */}
-            {(doctorProfile?.role === 'admin' || doctorProfile?.role === 'roster_admin' || !isConfigured) ? (
+            {/* Generate Roster - only for roster_admin, admin, or in demo mode */}
+            {/* Allow if: admin/roster_admin role OR Supabase not configured OR demo mode (authenticated but profile failed to load) */}
+            {(doctorProfile?.role === 'admin' || doctorProfile?.role === 'roster_admin' || !isConfigured || (isAuthenticated && !doctorProfile && dataLoaded)) ? (
               <button className={`generate-btn ${isGenerating ? 'loading' : ''}`} onClick={handleGenerateRoster} disabled={isGenerating}>
                 {isGenerating ? (<><div className="spinner" /><span>Generating...</span></>) : (<><Calendar size={18} /><span>Generate Roster</span></>)}
               </button>
