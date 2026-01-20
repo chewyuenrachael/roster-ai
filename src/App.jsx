@@ -146,6 +146,13 @@ const generateAIAllocation = (doctors, requests, month, year) => {
   
   enabledTiers.forEach(tier => { callCounts[tier] = {}; });
   
+  // Group doctors by team for staffing checks
+  const doctorsByTeam = {};
+  doctors.forEach(doc => {
+    if (!doctorsByTeam[doc.team]) doctorsByTeam[doc.team] = [];
+    doctorsByTeam[doc.team].push(doc);
+  });
+  
   // Initialize per-doctor tracking
   doctors.forEach(doc => {
     allocation[doc.id] = {};
@@ -165,8 +172,43 @@ const generateAIAllocation = (doctors, requests, month, year) => {
     return -MIN_DAYS_BETWEEN_CALLS - 1; // No previous call found
   };
   
+  // Helper: Count available (working) doctors for a team on a given day
+  const getTeamAvailableCount = (team, day) => {
+    const teamDocs = doctorsByTeam[team] || [];
+    return teamDocs.filter(doc => {
+      const docRequests = requests[doc.id] || {};
+      const dayAlloc = allocation[doc.id][day.date];
+      
+      // Not available if: on call, post-call, or on leave
+      if (enabledTiers.includes(dayAlloc)) return false; // On call
+      if (dayAlloc === 'PC') return false; // Post-call
+      if (['AL', 'BL'].includes(dayAlloc) || ['AL', 'BL'].includes(docRequests[day.date])) return false; // On leave
+      
+      // Also check if doctor was on call yesterday (will be PC tomorrow)
+      const yesterday = day.date - 1;
+      if (yesterday > 0) {
+        const yesterdayAlloc = allocation[doc.id][yesterday];
+        const yesterdayTier = HO_TIERS_CONFIG[yesterdayAlloc];
+        if (yesterdayTier?.postCall) return false; // Will be post-call
+      }
+      
+      return true;
+    }).length;
+  };
+  
+  // Helper: Check if assigning this doctor would violate minimum staffing
+  const wouldViolateMinStaffing = (doc, day) => {
+    const team = doc.team;
+    const minRequired = MINIMUM_STAFFING[team] || 1;
+    const currentAvailable = getTeamAvailableCount(team, day);
+    
+    // If assigning this doctor, team loses one worker (plus they may be PC next day)
+    // We need at least minRequired AFTER the assignment
+    return currentAvailable - 1 < minRequired;
+  };
+  
   // Helper: Check if doctor can be assigned on this day
-  const canAssign = (doc, day) => {
+  const canAssign = (doc, day, checkMinStaffing = true) => {
     const docRequests = requests[doc.id] || {};
     const currentAlloc = allocation[doc.id][day.date];
     
@@ -190,6 +232,9 @@ const generateAIAllocation = (doctors, requests, month, year) => {
     // Minimum days gap rule (no EOD calls)
     const lastCallDay = getLastCallDay(doc.id, day.date);
     if (day.date - lastCallDay < MIN_DAYS_BETWEEN_CALLS) return false;
+    
+    // Check minimum staffing (can be bypassed for fallback assignments)
+    if (checkMinStaffing && wouldViolateMinStaffing(doc, day)) return false;
     
     return true;
   };
@@ -222,8 +267,15 @@ const generateAIAllocation = (doctors, requests, month, year) => {
     const isWeekend = day.isWeekend || day.isPublicHoliday;
     
     enabledTiers.forEach(callType => {
-      // Get available doctors
-      const available = doctors.filter(doc => canAssign(doc, day));
+      // Get available doctors (respecting minimum staffing)
+      let available = doctors.filter(doc => canAssign(doc, day, true));
+      let usedFallback = false;
+      
+      // If no candidates with minimum staffing check, fall back to ignoring it
+      if (available.length === 0) {
+        available = doctors.filter(doc => canAssign(doc, day, false));
+        usedFallback = true;
+      }
       
       if (available.length === 0) {
         // Track shortage
@@ -265,6 +317,18 @@ const generateAIAllocation = (doctors, requests, month, year) => {
         
         if (isWeekend) {
           weekendCalls[assigned.id]++;
+        }
+        
+        // Track if we had to violate minimum staffing
+        if (usedFallback) {
+          const teamName = SHIFT_TYPES[assigned.team]?.description || assigned.team;
+          conflicts.push({
+            type: 'min_staffing_warning',
+            date: day.date,
+            callType,
+            team: assigned.team,
+            message: `${assigned.name} assigned to ${callType} on day ${day.date}, but ${teamName} may be below minimum staffing`
+          });
         }
         
         // Track if CR was honored
@@ -311,6 +375,23 @@ const generateAIAllocation = (doctors, requests, month, year) => {
           date: day.date,
           doctorId: doc.id,
           message: `${doc.name}'s Call Block on day ${day.date} was overridden due to insufficient staffing`
+        });
+      }
+    });
+  });
+  
+  // ============ FOURTH PASS: Check final staffing levels ============
+  // After all assignments, verify each team meets minimum staffing each day
+  days.forEach(day => {
+    Object.entries(MINIMUM_STAFFING).forEach(([team, minRequired]) => {
+      const available = getTeamAvailableCount(team, day);
+      if (available < minRequired) {
+        const teamName = SHIFT_TYPES[team]?.description || team;
+        conflicts.push({
+          type: 'staffing_shortage',
+          date: day.date,
+          team,
+          message: `${teamName} has only ${available}/${minRequired} doctors available on day ${day.date}`
         });
       }
     });
@@ -1861,7 +1942,10 @@ const DoctorAvailabilityView = ({ doctor, month, year, requests, setRequests, on
       if (typeInfo?.limit !== null) {
         const typeCount = Object.values(docReq).filter(r => r === selectedType).length;
         if (typeCount >= typeInfo.limit) {
-          // Limit reached, don't add
+          // Limit reached, show notification and don't add
+          if (toast) {
+            toast.warning(`Maximum ${typeInfo.limit} ${typeInfo.label}(s) allowed per month`);
+          }
           return;
         }
       }
@@ -2108,14 +2192,29 @@ export default function RosterApp() {
   // Load data from Supabase on mount
   useEffect(() => {
     const loadData = async () => {
+      console.log('📦 Starting data load... isSupabaseConfigured:', isSupabaseConfigured());
+      
       if (!isSupabaseConfigured()) {
+        console.log('📦 Supabase not configured, using demo data');
         setDataLoaded(true);
         return;
       }
       
+      // Helper to add timeout to promises
+      const withTimeout = (promise, timeoutMs = 10000) => {
+        return Promise.race([
+          promise,
+          new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Request timeout')), timeoutMs)
+          )
+        ]);
+      };
+      
       try {
         // Load doctors
-        const { data: doctorsData } = await db.doctors.getAll();
+        console.log('📦 Fetching doctors...');
+        const { data: doctorsData, error: doctorsError } = await withTimeout(db.doctors.getAll());
+        console.log('📦 Doctors response:', { data: doctorsData, error: doctorsError });
         if (doctorsData && doctorsData.length > 0) {
           // Transform Supabase data to match app format
           const transformedDoctors = doctorsData.map(d => ({
@@ -2129,7 +2228,9 @@ export default function RosterApp() {
         }
         
         // Load existing roster for current month
-        const { data: rosterData } = await db.rosters.getByMonth(year, month);
+        console.log('📦 Fetching roster for', year, month);
+        const { data: rosterData, error: rosterError } = await withTimeout(db.rosters.getByMonth(year, month));
+        console.log('📦 Roster response:', { data: rosterData, error: rosterError });
         if (rosterData) {
           setAllocation(rosterData.allocation || {});
           setCallPoints(rosterData.call_points || {});
@@ -2137,7 +2238,9 @@ export default function RosterApp() {
         }
         
         // Load requests for current month
-        const { data: requestsData } = await db.requests.getByMonth(year, month);
+        console.log('📦 Fetching requests for', year, month);
+        const { data: requestsData, error: requestsError } = await withTimeout(db.requests.getByMonth(year, month));
+        console.log('📦 Requests response:', { data: requestsData, error: requestsError });
         if (requestsData) {
           // Transform to { doctorId: { day: requestType } }
           const grouped = {};
@@ -2149,8 +2252,13 @@ export default function RosterApp() {
           setRequests(grouped);
         }
       } catch (error) {
-        console.error('Error loading data:', error);
+        console.error('❌ Error loading data:', error);
+        // If Supabase fails, we'll use the initial demo data
+        if (error.message === 'Request timeout') {
+          console.warn('⚠️ Supabase request timed out, using demo data');
+        }
       } finally {
+        console.log('📦 Data loading complete, setting dataLoaded to true');
         setDataLoaded(true);
       }
     };
