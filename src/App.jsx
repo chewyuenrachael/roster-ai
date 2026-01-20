@@ -69,11 +69,19 @@ const MINIMUM_STAFFING = {
 };
 
 const INITIAL_DOCTORS = [
+  // ESU team (minimum: 3/day)
   { id: 1, name: 'Sarah Chen', team: 'ESU', cumulativePoints: 17.5 },
   { id: 2, name: 'Marcus Wong', team: 'ESU', cumulativePoints: 16.0 },
-  { id: 3, name: 'Emily Tan', team: 'CLR', cumulativePoints: 15.0 },
-  { id: 4, name: 'Raj Sharma', team: 'CLR', cumulativePoints: 17.0 },
-  { id: 5, name: 'Jessica Lim', team: 'VAS', cumulativePoints: 15.5 },
+  { id: 3, name: 'Alex Lee', team: 'ESU', cumulativePoints: 14.0 },
+  { id: 4, name: 'David Ng', team: 'ESU', cumulativePoints: 18.5 },
+  // CLR team (minimum: 2/day)
+  { id: 5, name: 'Emily Tan', team: 'CLR', cumulativePoints: 15.0 },
+  { id: 6, name: 'Raj Sharma', team: 'CLR', cumulativePoints: 17.0 },
+  { id: 7, name: 'Michelle Chua', team: 'CLR', cumulativePoints: 13.5 },
+  // VAS team (minimum: 2/day)
+  { id: 8, name: 'Jessica Lim', team: 'VAS', cumulativePoints: 15.5 },
+  { id: 9, name: 'Kevin Tan', team: 'VAS', cumulativePoints: 16.5 },
+  { id: 10, name: 'Amanda Koh', team: 'VAS', cumulativePoints: 12.0 },
 ];
 
 const PUBLIC_HOLIDAYS = {
