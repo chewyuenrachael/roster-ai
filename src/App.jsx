@@ -48,6 +48,7 @@ const SHIFT_TYPES = {
   ),
   'PC': { label: 'PC', color: '#6B9A8A', textColor: '#fff', description: 'Post-Call', category: 'rest' },
   'AL': { label: 'AL', color: '#7FAE9A', textColor: '#fff', description: 'Annual Leave', category: 'leave' },
+  'BL': { label: 'BL', color: '#E8A598', textColor: '#fff', description: 'Birthday Leave', category: 'leave' },
   'CB': { label: 'CB', color: '#8AA1B4', textColor: '#fff', description: 'Call Block', category: 'request' },
   'CR': { label: 'CR', color: '#D6B656', textColor: '#1F2933', description: 'Call Request', category: 'request' },
   // Teams - Muted medical tones
@@ -131,86 +132,191 @@ const getCallPoints = (callType, day) => {
 
 // ============ AI ALLOCATION ALGORITHM ============
 
+// Minimum days gap between calls (no "every other day" calls)
+const MIN_DAYS_BETWEEN_CALLS = 2;
+
 const generateAIAllocation = (doctors, requests, month, year) => {
   const days = generateMonthDays(year, month);
   const allocation = {};
   const callPoints = {};
   const enabledTiers = getEnabledHOTiers();
   const callCounts = {};
+  const weekendCalls = {}; // Track weekend calls separately for fairness
+  const conflicts = []; // Track conflicts and shortages
+  
   enabledTiers.forEach(tier => { callCounts[tier] = {}; });
   
+  // Initialize per-doctor tracking
   doctors.forEach(doc => {
     allocation[doc.id] = {};
     callPoints[doc.id] = 0;
+    weekendCalls[doc.id] = 0;
     enabledTiers.forEach(tier => { callCounts[tier][doc.id] = 0; });
   });
   
-  // First pass: Apply leaves and blocks
+  // Helper: Get last call day for a doctor
+  const getLastCallDay = (docId, beforeDay) => {
+    for (let d = beforeDay - 1; d >= 1; d--) {
+      const alloc = allocation[docId][d];
+      if (enabledTiers.includes(alloc)) {
+        return d;
+      }
+    }
+    return -MIN_DAYS_BETWEEN_CALLS - 1; // No previous call found
+  };
+  
+  // Helper: Check if doctor can be assigned on this day
+  const canAssign = (doc, day) => {
+    const docRequests = requests[doc.id] || {};
+    const currentAlloc = allocation[doc.id][day.date];
+    
+    // Already assigned something
+    if (currentAlloc) return false;
+    
+    // On leave (AL or BL)
+    if (['AL', 'BL'].includes(docRequests[day.date])) return false;
+    
+    // Has Call Block for this day
+    if (docRequests[day.date] === 'CB') return false;
+    
+    // Post-call from yesterday (if yesterday was a post-call tier)
+    const yesterday = day.date - 1;
+    if (yesterday > 0) {
+      const yesterdayAlloc = allocation[doc.id][yesterday];
+      const yesterdayTier = HO_TIERS_CONFIG[yesterdayAlloc];
+      if (yesterdayTier?.postCall) return false;
+    }
+    
+    // Minimum days gap rule (no EOD calls)
+    const lastCallDay = getLastCallDay(doc.id, day.date);
+    if (day.date - lastCallDay < MIN_DAYS_BETWEEN_CALLS) return false;
+    
+    return true;
+  };
+  
+  // Helper: Score doctor for fairness (lower = should get more calls)
+  const getFairnessScore = (doc, isWeekend) => {
+    let score = (doc.cumulativePoints || 0) + callPoints[doc.id];
+    
+    // Add weekend penalty to spread weekend calls
+    if (isWeekend) {
+      score += weekendCalls[doc.id] * 5; // Penalize those with more weekend calls
+    }
+    
+    return score;
+  };
+  
+  // ============ FIRST PASS: Apply leaves (AL, BL) ============
   doctors.forEach(doc => {
     const docRequests = requests[doc.id] || {};
     days.forEach(day => {
-      if (docRequests[day.date]) {
-        const req = docRequests[day.date];
-        if (['AL', 'CB'].includes(req)) {
-          allocation[doc.id][day.date] = req;
-        }
+      const req = docRequests[day.date];
+      if (['AL', 'BL'].includes(req)) {
+        allocation[doc.id][day.date] = req;
       }
     });
   });
   
-  // Second pass: Allocate calls
+  // ============ SECOND PASS: Allocate calls ============
   days.forEach(day => {
+    const isWeekend = day.isWeekend || day.isPublicHoliday;
+    
     enabledTiers.forEach(callType => {
-      const available = doctors.filter(doc => {
-        const currentAlloc = allocation[doc.id][day.date];
-        if (currentAlloc) return false;
-        const yesterday = day.date - 1;
-        if (yesterday > 0) {
-          const yesterdayAlloc = allocation[doc.id][yesterday];
-          const yesterdayTier = HO_TIERS_CONFIG[yesterdayAlloc];
-          if (yesterdayTier?.postCall) return false;
-        }
-        return true;
-      });
+      // Get available doctors
+      const available = doctors.filter(doc => canAssign(doc, day));
       
-      if (available.length === 0) return;
+      if (available.length === 0) {
+        // Track shortage
+        conflicts.push({
+          type: 'shortage',
+          date: day.date,
+          callType,
+          message: `No doctors available for ${callType} on day ${day.date}`
+        });
+        return;
+      }
       
+      // Check for Call Requests (CR) - honor if possible
       const requesters = available.filter(doc => {
         const docRequests = requests[doc.id] || {};
         return docRequests[day.date] === 'CR';
       });
       
-      let candidates = requesters.length > 0 ? requesters : available;
-      candidates.sort((a, b) => (a.cumulativePoints + callPoints[a.id]) - (b.cumulativePoints + callPoints[b.id]));
+      // If multiple CR for same slot, pick one with fewer points
+      let candidates = requesters.length > 0 ? [...requesters] : [...available];
       
+      // Sort by fairness score (lowest first = should get more calls)
+      candidates.sort((a, b) => getFairnessScore(a, isWeekend) - getFairnessScore(b, isWeekend));
+      
+      // Team preference for HO1 (ESU doctors prioritized for active on-call)
       if (callType === 'HO1') {
-        const esuDocs = candidates.filter(d => d.team === 'ESU');
-        if (esuDocs.length > 0) candidates = [...esuDocs, ...candidates.filter(d => d.team !== 'ESU')];
+        const esuCandidates = candidates.filter(d => d.team === 'ESU');
+        if (esuCandidates.length > 0) {
+          candidates = [...esuCandidates, ...candidates.filter(d => d.team !== 'ESU')];
+        }
       }
       
+      // Assign the best candidate
       if (candidates.length > 0) {
         const assigned = candidates[0];
         allocation[assigned.id][day.date] = callType;
         callPoints[assigned.id] += getCallPoints(callType, day);
         callCounts[callType][assigned.id]++;
+        
+        if (isWeekend) {
+          weekendCalls[assigned.id]++;
+        }
+        
+        // Track if CR was honored
+        const docRequests = requests[assigned.id] || {};
+        if (requesters.length > 1 && docRequests[day.date] === 'CR') {
+          // Multiple CRs - some couldn't be honored
+          requesters.filter(r => r.id !== assigned.id).forEach(r => {
+            conflicts.push({
+              type: 'cr_conflict',
+              date: day.date,
+              callType,
+              doctorId: r.id,
+              message: `${r.name}'s call request for day ${day.date} couldn't be honored (${assigned.name} assigned instead)`
+            });
+          });
+        }
       }
     });
   });
   
-  // Third pass: Add post-call
+  // ============ THIRD PASS: Add post-call markers ============
   doctors.forEach(doc => {
     days.forEach((day, idx) => {
       if (idx === 0) return;
       const yesterday = days[idx - 1];
       const yesterdayAlloc = allocation[doc.id][yesterday.date];
       const yesterdayTier = HO_TIERS_CONFIG[yesterdayAlloc];
+      
+      // Add PC if yesterday was a post-call tier and today is free
       if (yesterdayTier?.postCall && !allocation[doc.id][day.date]) {
         allocation[doc.id][day.date] = 'PC';
       }
     });
   });
   
-  return { allocation, callPoints, callCounts };
+  // ============ CHECK FOR CB OVERRIDES (if any) ============
+  // This shouldn't happen with our algorithm, but track if it does
+  doctors.forEach(doc => {
+    const docRequests = requests[doc.id] || {};
+    days.forEach(day => {
+      if (docRequests[day.date] === 'CB' && enabledTiers.includes(allocation[doc.id][day.date])) {
+        conflicts.push({
+          type: 'cb_override',
+          date: day.date,
+          doctorId: doc.id,
+          message: `${doc.name}'s Call Block on day ${day.date} was overridden due to insufficient staffing`
+        });
+      }
+    });
+  });
+  
+  return { allocation, callPoints, callCounts, weekendCalls, conflicts };
 };
 
 // ============ COMPONENTS ============
@@ -1749,6 +1855,18 @@ const DoctorAvailabilityView = ({ doctor, month, year, requests, setRequests, on
     const current = docReq[dayNum];
     const isRemoving = current === selectedType;
     
+    // Check limit before adding (not when removing)
+    if (!isRemoving) {
+      const typeInfo = requestTypes.find(r => r.type === selectedType);
+      if (typeInfo?.limit !== null) {
+        const typeCount = Object.values(docReq).filter(r => r === selectedType).length;
+        if (typeCount >= typeInfo.limit) {
+          // Limit reached, don't add
+          return;
+        }
+      }
+    }
+    
     // Update local state immediately for responsive UI
     setRequests(prev => {
       const docReq = prev[doctor.id] || {};
@@ -1765,11 +1883,24 @@ const DoctorAvailabilityView = ({ doctor, month, year, requests, setRequests, on
   };
   
   const firstDayOffset = new Date(year, month, 1).getDay();
+  
+  // Submission limits
+  const MAX_CB_PER_MONTH = 2;
+  const MAX_CR_PER_MONTH = 2;
+  
   const requestTypes = [
-    { type: 'AL', label: 'Annual Leave', icon: '🏖️' },
-    { type: 'CB', label: 'Call Block', icon: '🚫' },
-    { type: 'CR', label: 'Call Request', icon: '✋' },
+    { type: 'AL', label: 'Annual Leave', icon: '🏖️', limit: null },
+    { type: 'BL', label: 'Birthday Leave', icon: '🎂', limit: 1 },
+    { type: 'CB', label: 'Call Block', icon: '🚫', limit: MAX_CB_PER_MONTH },
+    { type: 'CR', label: 'Call Request', icon: '✋', limit: MAX_CR_PER_MONTH },
   ];
+  
+  // Check if limit reached for selected type
+  const currentTypeInfo = requestTypes.find(r => r.type === selectedType);
+  const currentCount = selectedType === 'CB' ? cbCount : 
+                       selectedType === 'CR' ? crCount :
+                       selectedType === 'BL' ? Object.values(docRequests).filter(r => r === 'BL').length : 0;
+  const limitReached = currentTypeInfo?.limit !== null && currentCount >= currentTypeInfo.limit;
   
   return (
     <div className="availability-view">
@@ -1794,21 +1925,38 @@ const DoctorAvailabilityView = ({ doctor, month, year, requests, setRequests, on
         <div className="type-selector">
           <span className="control-label">Mark days as:</span>
           <div className="type-buttons">
-            {requestTypes.map(({ type, label, icon }) => (
-              <button
-                key={type}
-                className={`type-btn ${selectedType === type ? 'active' : ''}`}
-                onClick={() => setSelectedType(type)}
-                style={{
-                  backgroundColor: selectedType === type ? SHIFT_TYPES[type].color : 'transparent',
-                  color: selectedType === type ? SHIFT_TYPES[type].textColor : SHIFT_TYPES[type].color,
-                  borderColor: SHIFT_TYPES[type].color,
-                }}
-              >
-                <span>{icon}</span>
-                <span>{label}</span>
-              </button>
-            ))}
+            {requestTypes.map(({ type, label, icon, limit }) => {
+              const count = Object.values(docRequests).filter(r => r === type).length;
+              const atLimit = limit !== null && count >= limit;
+              return (
+                <button
+                  key={type}
+                  className={`type-btn ${selectedType === type ? 'active' : ''} ${atLimit ? 'at-limit' : ''}`}
+                  onClick={() => setSelectedType(type)}
+                  style={{
+                    backgroundColor: selectedType === type ? SHIFT_TYPES[type].color : 'transparent',
+                    color: selectedType === type ? SHIFT_TYPES[type].textColor : SHIFT_TYPES[type].color,
+                    borderColor: SHIFT_TYPES[type].color,
+                    opacity: atLimit && selectedType !== type ? 0.5 : 1,
+                  }}
+                >
+                  <span>{icon}</span>
+                  <span>{label}</span>
+                  {limit !== null && (
+                    <span className="limit-badge" style={{ 
+                      backgroundColor: atLimit ? '#EF4444' : '#10B981',
+                      color: '#fff',
+                      padding: '2px 6px',
+                      borderRadius: '10px',
+                      fontSize: '10px',
+                      marginLeft: '4px'
+                    }}>
+                      {count}/{limit}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
           </div>
         </div>
         <div className="request-summary">
@@ -1854,13 +2002,17 @@ const DoctorAvailabilityView = ({ doctor, month, year, requests, setRequests, on
   );
 };
 
-const DoctorCard = ({ doctor, hasSubmitted, requestSummary, onClick }) => (
-  <div className={`doctor-card ${hasSubmitted ? 'submitted' : ''}`} onClick={onClick}>
+const DoctorCard = ({ doctor, hasSubmitted, requestSummary, onClick, isOwnProfile = false, canEdit = true }) => (
+  <div 
+    className={`doctor-card ${hasSubmitted ? 'submitted' : ''} ${isOwnProfile ? 'own-profile' : ''} ${!canEdit ? 'read-only' : ''}`} 
+    onClick={canEdit ? onClick : undefined}
+    style={{ cursor: canEdit ? 'pointer' : 'default' }}
+  >
     <div className="card-avatar" style={{ background: `linear-gradient(135deg, ${SHIFT_TYPES[doctor.team]?.color || '#6366f1'}, ${SHIFT_TYPES[doctor.team]?.color || '#6366f1'}dd)` }}>
       {doctor.name.charAt(0)}
     </div>
     <div className="card-info">
-      <h3>{doctor.name}</h3>
+      <h3>{doctor.name} {isOwnProfile && <span className="you-badge">You</span>}</h3>
       <div className="card-meta">
         <ShiftBadge shift={doctor.team} small />
         <span className="points">{doctor.cumulativePoints} pts</span>
@@ -1936,6 +2088,8 @@ export default function RosterApp() {
   const [allocation, setAllocation] = useState({});
   const [callPoints, setCallPoints] = useState({});
   const [callCounts, setCallCounts] = useState({});
+  const [weekendCalls, setWeekendCalls] = useState({});
+  const [conflicts, setConflicts] = useState([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [hasGenerated, setHasGenerated] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
@@ -2032,20 +2186,34 @@ export default function RosterApp() {
     setAllocation(result.allocation);
     setCallPoints(result.callPoints);
     setCallCounts(result.callCounts);
+    setWeekendCalls(result.weekendCalls || {});
+    setConflicts(result.conflicts || []);
     setHasGenerated(true);
     setIsGenerating(false);
+    
+    // Show conflicts if any
+    const shortages = result.conflicts?.filter(c => c.type === 'shortage') || [];
+    const cbOverrides = result.conflicts?.filter(c => c.type === 'cb_override') || [];
     
     // Save to Supabase if configured
     if (isSupabaseConfigured()) {
       try {
         await db.rosters.save(year, month, result.allocation, result.callPoints, 'draft');
-        toast.success('Roster generated and saved successfully!');
+        if (shortages.length > 0 || cbOverrides.length > 0) {
+          toast.warning(`Roster generated with ${shortages.length + cbOverrides.length} conflict(s). Review before publishing.`);
+        } else {
+          toast.success('Roster generated and saved successfully!');
+        }
       } catch (error) {
         console.error('Error saving roster:', error);
         toast.error('Roster generated but failed to save to database');
       }
     } else {
-      toast.success('Roster generated successfully!');
+      if (shortages.length > 0 || cbOverrides.length > 0) {
+        toast.warning(`Roster generated with ${shortages.length + cbOverrides.length} conflict(s). Review before publishing.`);
+      } else {
+        toast.success('Roster generated successfully!');
+      }
     }
   };
   
@@ -2345,9 +2513,17 @@ export default function RosterApp() {
               </div>
             </div>
             
-            <button className={`generate-btn ${isGenerating ? 'loading' : ''}`} onClick={handleGenerateRoster} disabled={isGenerating}>
-              {isGenerating ? (<><div className="spinner" /><span>Generating...</span></>) : (<><Calendar size={18} /><span>Generate Roster</span></>)}
-            </button>
+            {/* Generate Roster - only for roster_admin or admin */}
+            {(doctorProfile?.role === 'admin' || doctorProfile?.role === 'roster_admin' || !isConfigured) ? (
+              <button className={`generate-btn ${isGenerating ? 'loading' : ''}`} onClick={handleGenerateRoster} disabled={isGenerating}>
+                {isGenerating ? (<><div className="spinner" /><span>Generating...</span></>) : (<><Calendar size={18} /><span>Generate Roster</span></>)}
+              </button>
+            ) : (
+              <div className="role-hint">
+                <Shield size={16} />
+                <span>Only Roster IC can generate rosters</span>
+              </div>
+            )}
           </div>
           
           {hasGenerated && (
@@ -2381,6 +2557,33 @@ export default function RosterApp() {
             </div>
           )}
           
+          {/* Conflict Alerts */}
+          {conflicts.length > 0 && hasGenerated && (
+            <div className="conflicts-section">
+              <div className="conflicts-header">
+                <AlertCircle size={20} />
+                <h3>Roster Conflicts ({conflicts.length})</h3>
+              </div>
+              <div className="conflicts-list">
+                {conflicts.slice(0, 5).map((conflict, idx) => (
+                  <div key={idx} className={`conflict-item ${conflict.type}`}>
+                    <span className="conflict-type">
+                      {conflict.type === 'shortage' ? '⚠️ Shortage' : 
+                       conflict.type === 'cb_override' ? '🚫 CB Override' : 
+                       conflict.type === 'cr_conflict' ? '✋ CR Conflict' : '❓ Unknown'}
+                    </span>
+                    <span className="conflict-message">{conflict.message}</span>
+                  </div>
+                ))}
+                {conflicts.length > 5 && (
+                  <div className="conflict-more">
+                    And {conflicts.length - 5} more conflicts...
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+          
           <div className="teams-section">
             {!dataLoaded && isSupabaseConfigured() ? (
               // Show skeleton loading states
@@ -2405,7 +2608,19 @@ export default function RosterApp() {
                       doctor={doctor}
                       hasSubmitted={requests[doctor.id] && Object.keys(requests[doctor.id]).length > 0}
                       requestSummary={getRequestSummary(doctor.id)}
-                      onClick={() => { setSelectedDoctor(doctor); setCurrentView('availability'); }}
+                      onClick={() => {
+                        // Only allow editing own requests, unless admin/roster_admin
+                        const canEdit = !isConfigured || 
+                          doctorProfile?.role === 'admin' || 
+                          doctorProfile?.role === 'roster_admin' ||
+                          doctorProfile?.id === doctor.id;
+                        if (canEdit) {
+                          setSelectedDoctor(doctor); 
+                          setCurrentView('availability');
+                        }
+                      }}
+                      isOwnProfile={doctorProfile?.id === doctor.id}
+                      canEdit={!isConfigured || doctorProfile?.role === 'admin' || doctorProfile?.role === 'roster_admin' || doctorProfile?.id === doctor.id}
                     />
                   ))}
                 </div>
@@ -2758,6 +2973,18 @@ const styles = `
   
   .generate-btn:disabled { opacity: 0.6; cursor: not-allowed; }
   
+  .role-hint {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 20px;
+    background: #F1F5F9;
+    border: 1px solid #E2E8F0;
+    border-radius: 8px;
+    color: #64748B;
+    font-size: 13px;
+  }
+  
   .spinner {
     width: 20px; height: 20px;
     border: 2px solid rgba(255,255,255,0.3);
@@ -2783,6 +3010,68 @@ const styles = `
     gap: 12px;
     background: #FFFFFF;
     border: 1px solid #E2E8F0;
+  }
+  
+  /* Conflicts Section */
+  .conflicts-section {
+    background: #FEF2F2;
+    border: 1px solid #FECACA;
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 20px;
+  }
+  
+  .conflicts-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: #991B1B;
+    margin-bottom: 12px;
+  }
+  
+  .conflicts-header h3 {
+    font-size: 16px;
+    font-weight: 600;
+    margin: 0;
+  }
+  
+  .conflicts-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  
+  .conflict-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    background: #FFFFFF;
+    border-radius: 8px;
+    border-left: 4px solid #DC2626;
+  }
+  
+  .conflict-item.shortage { border-left-color: #D97706; }
+  .conflict-item.cb_override { border-left-color: #DC2626; }
+  .conflict-item.cr_conflict { border-left-color: #3B82F6; }
+  
+  .conflict-type {
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  
+  .conflict-message {
+    font-size: 13px;
+    color: #64748B;
+  }
+  
+  .conflict-more {
+    font-size: 13px;
+    color: #64748B;
+    font-style: italic;
+    padding: 8px;
+    text-align: center;
   }
   
   .roster-cta .cta-content,
@@ -2859,6 +3148,33 @@ const styles = `
   }
   
   .doctor-card.submitted { border-color: #059669; background: #FFFFFF; }
+  
+  .doctor-card.own-profile { 
+    border-color: #0F766E; 
+    background: linear-gradient(135deg, #F0FDF9 0%, #ECFDF5 100%);
+    box-shadow: 0 2px 8px rgba(15, 118, 110, 0.15);
+  }
+  
+  .doctor-card.read-only { 
+    opacity: 0.7; 
+    cursor: default; 
+  }
+  
+  .doctor-card.read-only:hover {
+    background: #F8FAFC;
+    border-color: #E2E8F0;
+  }
+  
+  .you-badge {
+    background: #0F766E;
+    color: white;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 10px;
+    font-weight: 500;
+    margin-left: 8px;
+    vertical-align: middle;
+  }
   
   .card-avatar {
     width: 40px; height: 40px;
