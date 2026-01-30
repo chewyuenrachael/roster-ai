@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Calendar, Users, CheckCircle, AlertCircle, ChevronLeft, ChevronRight, Sparkles, Eye, TrendingUp, Award, Shield, Zap, Info, Filter, BarChart3, Lightbulb, Search, Copy, ArrowDown, Clock, UserCheck, Coffee, Pill, Building2, CalendarDays, User, LogIn, LogOut, Settings, Database, Menu, X as XIcon } from 'lucide-react';
+import { Calendar, Users, CheckCircle, AlertCircle, ChevronLeft, ChevronRight, Sparkles, Eye, TrendingUp, Award, Shield, Zap, Info, Filter, BarChart3, Lightbulb, Search, Copy, ArrowDown, Clock, UserCheck, Coffee, Pill, Building2, CalendarDays, User, LogIn, LogOut, Settings, Database, Menu, X as XIcon, Edit3 } from 'lucide-react';
 import { useAuthContext } from './contexts/AuthContext';
 import { db, isSupabaseConfigured } from './lib/supabase';
 import AuthModal from './components/AuthModal';
@@ -1492,12 +1492,89 @@ const AntibioticGuidelinesView = ({ onBack }) => {
 
 // ============ MONTHLY ROSTER VIEW COMPONENT ============
 
-const MonthlyRosterView = ({ doctors, allocation, callPoints, month, year, onBack }) => {
+const MonthlyRosterView = ({ doctors, allocation, callPoints, month, year, onBack, isRosterAdmin, setAllocation, setCallPoints, toast, onSaveRoster }) => {
   const [viewMode, setViewMode] = useState('month'); // 'month' or 'week'
   const [currentWeek, setCurrentWeek] = useState(0);
+  const [editingCell, setEditingCell] = useState(null); // { doctorId, day, currentShift }
+  const [showShiftPicker, setShowShiftPicker] = useState(false);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   
   const days = generateMonthDays(year, month);
   const enabledTiers = getEnabledHOTiers();
+  
+  // Shift options for the picker
+  const shiftOptions = [
+    ...enabledTiers.map(tier => ({ value: tier, label: `${tier} - ${HO_TIERS_CONFIG[tier]?.description || tier}` })),
+    { value: 'PC', label: 'PC - Post-Call' },
+    { value: 'AL', label: 'AL - Annual Leave' },
+    { value: 'BL', label: 'BL - Birthday Leave' },
+    { value: 'CB', label: 'CB - Call Block' },
+    { value: null, label: 'Clear' },
+  ];
+  
+  // Handle cell click for editing (only for Roster Monster)
+  const handleCellClick = (doctorId, day, currentShift) => {
+    if (!isRosterAdmin || !setAllocation) return;
+    setEditingCell({ doctorId, day, currentShift });
+    setShowShiftPicker(true);
+  };
+  
+  // Apply shift change
+  const handleShiftChange = (newShift) => {
+    if (!editingCell || !setAllocation) return;
+    
+    setAllocation(prev => {
+      const updated = { ...prev };
+      if (!updated[editingCell.doctorId]) {
+        updated[editingCell.doctorId] = {};
+      }
+      if (newShift) {
+        updated[editingCell.doctorId] = {
+          ...updated[editingCell.doctorId],
+          [editingCell.day]: newShift
+        };
+      } else {
+        // Clear the shift
+        const docAlloc = { ...updated[editingCell.doctorId] };
+        delete docAlloc[editingCell.day];
+        updated[editingCell.doctorId] = docAlloc;
+      }
+      return updated;
+    });
+    
+    // Recalculate points for this doctor
+    if (setCallPoints) {
+      const day = days.find(d => d.date === editingCell.day);
+      if (day && newShift) {
+        const points = getCallPoints(newShift, day);
+        setCallPoints(prev => ({
+          ...prev,
+          [editingCell.doctorId]: (prev[editingCell.doctorId] || 0) + points - (editingCell.currentShift ? getCallPoints(editingCell.currentShift, day) : 0)
+        }));
+      }
+    }
+    
+    setShowShiftPicker(false);
+    setEditingCell(null);
+    setHasUnsavedChanges(true);
+    
+    if (toast) {
+      toast.success('Shift updated');
+    }
+  };
+  
+  // Save roster changes
+  const handleSaveRoster = async () => {
+    if (!onSaveRoster) return;
+    setIsSaving(true);
+    try {
+      await onSaveRoster();
+      setHasUnsavedChanges(false);
+    } finally {
+      setIsSaving(false);
+    }
+  };
   
   // Group days into weeks
   const weeks = useMemo(() => {
@@ -1657,11 +1734,13 @@ const MonthlyRosterView = ({ doctors, allocation, callPoints, month, year, onBac
                 {days.map(day => {
                   const shift = allocation[doc.id]?.[day.date];
                   const shiftInfo = SHIFT_TYPES[shift];
+                  const isEditing = editingCell?.doctorId === doc.id && editingCell?.day === day.date;
                   return (
                     <div 
                       key={day.date} 
-                      className={`grid-cell shift-cell ${day.isWeekend ? 'weekend' : ''} ${shift ? 'has-shift' : ''}`}
+                      className={`grid-cell shift-cell ${day.isWeekend ? 'weekend' : ''} ${shift ? 'has-shift' : ''} ${isRosterAdmin ? 'editable' : ''} ${isEditing ? 'editing' : ''}`}
                       style={shift ? { backgroundColor: shiftInfo?.color + '30' } : {}}
+                      onClick={() => handleCellClick(doc.id, day.date, shift)}
                     >
                       {shift && (
                         <span 
@@ -1872,6 +1951,66 @@ const MonthlyRosterView = ({ doctors, allocation, callPoints, month, year, onBac
           ))}
         </div>
       </div>
+      
+      {/* Edit Mode Badge and Save Button for Roster Monster */}
+      {isRosterAdmin && (
+        <div className="edit-mode-controls">
+          <div className="edit-mode-badge">
+            <Edit3 size={14} />
+            <span>Edit Mode - Click cells to change shifts</span>
+          </div>
+          {hasUnsavedChanges && onSaveRoster && (
+            <button 
+              className={`save-roster-btn ${isSaving ? 'saving' : ''}`} 
+              onClick={handleSaveRoster}
+              disabled={isSaving}
+            >
+              {isSaving ? (
+                <><div className="save-spinner" /><span>Saving...</span></>
+              ) : (
+                <><Database size={16} /><span>Save Changes</span></>
+              )}
+            </button>
+          )}
+        </div>
+      )}
+      
+      {/* Shift Picker Modal */}
+      {showShiftPicker && editingCell && (
+        <div className="shift-picker-overlay" onClick={() => { setShowShiftPicker(false); setEditingCell(null); }}>
+          <div className="shift-picker-modal" onClick={e => e.stopPropagation()}>
+            <div className="shift-picker-header">
+              <h4>Select Shift</h4>
+              <span className="shift-picker-context">
+                {doctors.find(d => d.id === editingCell.doctorId)?.name} - Day {editingCell.day}
+              </span>
+            </div>
+            <div className="shift-picker-options">
+              {shiftOptions.map(opt => {
+                const shiftInfo = SHIFT_TYPES[opt.value];
+                return (
+                  <button 
+                    key={opt.value || 'clear'} 
+                    onClick={() => handleShiftChange(opt.value)}
+                    className={`shift-option ${editingCell.currentShift === opt.value ? 'active' : ''} ${!opt.value ? 'clear-option' : ''}`}
+                    style={opt.value && shiftInfo ? { borderLeftColor: shiftInfo.color } : {}}
+                  >
+                    {opt.value && shiftInfo && (
+                      <span className="shift-option-badge" style={{ backgroundColor: shiftInfo.color, color: shiftInfo.textColor }}>
+                        {opt.value}
+                      </span>
+                    )}
+                    <span className="shift-option-label">{opt.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+            <button className="shift-picker-cancel" onClick={() => { setShowShiftPicker(false); setEditingCell(null); }}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -2099,6 +2238,7 @@ const DoctorCard = ({ doctor, hasSubmitted, requestSummary, onClick, isOwnProfil
     className={`doctor-card ${hasSubmitted ? 'submitted' : ''} ${isOwnProfile ? 'own-profile' : ''} ${!canEdit ? 'read-only' : ''}`} 
     onClick={canEdit ? onClick : undefined}
     style={{ cursor: canEdit ? 'pointer' : 'default' }}
+    title={!canEdit ? 'You can only edit your own availability' : ''}
   >
     <div className="card-avatar" style={{ background: `linear-gradient(135deg, ${SHIFT_TYPES[doctor.team]?.color || '#6366f1'}, ${SHIFT_TYPES[doctor.team]?.color || '#6366f1'}dd)` }}>
       {doctor.name.charAt(0)}
@@ -2114,6 +2254,12 @@ const DoctorCard = ({ doctor, hasSubmitted, requestSummary, onClick, isOwnProfil
           {requestSummary.al > 0 && <span className="req-badge al">{requestSummary.al} AL</span>}
           {requestSummary.cb > 0 && <span className="req-badge cb">{requestSummary.cb} CB</span>}
           {requestSummary.cr > 0 && <span className="req-badge cr">{requestSummary.cr} CR</span>}
+        </div>
+      )}
+      {!canEdit && (
+        <div className="view-only-hint">
+          <Eye size={12} />
+          <span>View only</span>
         </div>
       )}
     </div>
@@ -2436,6 +2582,21 @@ export default function RosterApp() {
           month={month}
           year={year}
           onBack={() => setCurrentView('dashboard')}
+          isRosterAdmin={doctorProfile?.role === 'roster_admin' || doctorProfile?.role === 'admin' || !isConfigured || (isAuthenticated && !doctorProfile && dataLoaded)}
+          setAllocation={setAllocation}
+          setCallPoints={setCallPoints}
+          toast={toast}
+          onSaveRoster={async () => {
+            if (isSupabaseConfigured()) {
+              try {
+                await db.rosters.save(year, month, allocation, callPoints, 'draft');
+                toast.success('Roster saved successfully');
+              } catch (error) {
+                console.error('Error saving roster:', error);
+                toast.error('Failed to save roster');
+              }
+            }
+          }}
         />
       </div>
     );
@@ -3280,6 +3441,15 @@ const styles = `
   .doctor-card.read-only:hover {
     background: #F8FAFC;
     border-color: #E2E8F0;
+  }
+  
+  .view-only-hint {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    color: #94A3B8;
+    margin-top: 4px;
   }
   
   .you-badge {
@@ -4366,6 +4536,217 @@ const styles = `
     font-size: 9px;
     font-weight: 700;
     font-family: 'Inter', sans-serif;
+  }
+  
+  /* Editable cells for Roster Monster */
+  .shift-cell.editable {
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  
+  .shift-cell.editable:hover {
+    outline: 2px solid #3B82F6;
+    outline-offset: -2px;
+    background-color: rgba(59, 130, 246, 0.1) !important;
+  }
+  
+  .shift-cell.editing {
+    outline: 2px solid #10B981;
+    outline-offset: -2px;
+  }
+  
+  /* Edit Mode Controls */
+  .edit-mode-controls {
+    position: fixed;
+    bottom: 80px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    z-index: 100;
+  }
+  
+  /* Edit Mode Badge */
+  .edit-mode-badge {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%);
+    color: #92400E;
+    padding: 10px 20px;
+    border-radius: 50px;
+    font-size: 13px;
+    font-weight: 600;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+    border: 1px solid #FCD34D;
+  }
+  
+  /* Save Roster Button */
+  .save-roster-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: linear-gradient(135deg, #10B981 0%, #059669 100%);
+    color: white;
+    padding: 12px 24px;
+    border-radius: 50px;
+    font-size: 14px;
+    font-weight: 600;
+    border: none;
+    cursor: pointer;
+    box-shadow: 0 4px 15px rgba(16, 185, 129, 0.4);
+    transition: all 0.2s ease;
+  }
+  
+  .save-roster-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(16, 185, 129, 0.5);
+  }
+  
+  .save-roster-btn:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+    transform: none;
+  }
+  
+  .save-roster-btn.saving {
+    background: linear-gradient(135deg, #6B7280 0%, #4B5563 100%);
+  }
+  
+  .save-spinner {
+    width: 16px;
+    height: 16px;
+    border: 2px solid rgba(255,255,255,0.3);
+    border-top-color: white;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  
+  /* Shift Picker Modal */
+  .shift-picker-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    animation: fadeIn 0.2s ease;
+  }
+  
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  
+  .shift-picker-modal {
+    background: white;
+    border-radius: 16px;
+    padding: 24px;
+    min-width: 320px;
+    max-width: 90vw;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    animation: slideUp 0.2s ease;
+  }
+  
+  @keyframes slideUp {
+    from { transform: translateY(20px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+  }
+  
+  .shift-picker-header {
+    margin-bottom: 20px;
+    text-align: center;
+  }
+  
+  .shift-picker-header h4 {
+    font-size: 18px;
+    font-weight: 700;
+    color: #1E293B;
+    margin-bottom: 4px;
+  }
+  
+  .shift-picker-context {
+    font-size: 13px;
+    color: #64748B;
+  }
+  
+  .shift-picker-options {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+  
+  .shift-option {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    border: 1px solid #E2E8F0;
+    border-left: 4px solid #E2E8F0;
+    border-radius: 8px;
+    background: white;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    text-align: left;
+  }
+  
+  .shift-option:hover {
+    background: #F8FAFC;
+    border-color: #CBD5E1;
+  }
+  
+  .shift-option.active {
+    background: #EFF6FF;
+    border-color: #3B82F6;
+    border-left-color: #3B82F6 !important;
+  }
+  
+  .shift-option.clear-option {
+    border-left-color: #EF4444;
+    color: #EF4444;
+  }
+  
+  .shift-option.clear-option:hover {
+    background: #FEF2F2;
+  }
+  
+  .shift-option-badge {
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 700;
+    min-width: 36px;
+    text-align: center;
+  }
+  
+  .shift-option-label {
+    font-size: 14px;
+    color: #334155;
+  }
+  
+  .shift-picker-cancel {
+    width: 100%;
+    padding: 12px;
+    border: 1px solid #E2E8F0;
+    border-radius: 8px;
+    background: white;
+    color: #64748B;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  
+  .shift-picker-cancel:hover {
+    background: #F1F5F9;
+    color: #1E293B;
   }
   
   .stats-cell {
