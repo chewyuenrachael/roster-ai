@@ -199,7 +199,49 @@ Hospital/Department Settings:
 
 ## 6. OUTPUT: ROSTER VIEWS
 
-### 6.1 Monthly Roster View (Calendar Style)
+### 6.1 Daily Handover View (NEW - Priority Feature)
+
+**Purpose**: Quick view of who's on call today and tomorrow for seamless handover.
+
+#### Today's Call Team
+```
+┌─────────────────────────────────────────┐
+│  📅 TODAY - Monday, 6 Jan 2025          │
+├─────────────────────────────────────────┤
+│  HO1 (Active)    : Dr. Sarah Chen       │
+│  HO2 (Passive)   : Dr. Marcus Wong      │
+│  HO3 (Handover)  : Dr. Emily Tan        │
+│  HO4             : Dr. Raj Sharma       │
+├─────────────────────────────────────────┤
+│  On Leave: Dr. Jessica Lim, Dr. David Ng│
+│  Post-Call: Dr. Michelle Goh            │
+└─────────────────────────────────────────┘
+```
+
+#### Tomorrow's Call Team (Handover To)
+```
+┌─────────────────────────────────────────┐
+│  📅 TOMORROW - Tuesday, 7 Jan 2025      │
+├─────────────────────────────────────────┤
+│  HO1 (Active)    : Dr. Kevin Teo        │
+│  HO2 (Passive)   : Dr. Amanda Lee       │
+│  HO3 (Handover)  : Dr. Ryan Koh         │
+│  HO4             : Dr. Priya Nair       │
+└─────────────────────────────────────────┘
+```
+
+#### Quick Search by Doctor Name
+- Type a doctor's name to see all their upcoming calls
+- Shows: Date, Day, Call Type, Team on duty with them
+
+#### Features:
+- [ ] One-tap access from home screen
+- [ ] Auto-detects "today" based on current date
+- [ ] Navigate to any date with date picker
+- [ ] Share today's roster via message/clipboard
+- [ ] Search individual doctor's schedule
+
+### 6.2 Monthly Roster View (Calendar Style)
 - Grid showing all doctors × all days
 - Color-coded by shift type (HO1, HO2, HO3, AL, PC, etc.)
 - Show team groupings
@@ -210,6 +252,57 @@ Hospital/Department Settings:
 - Who is on AL
 - Who is post-call
 - Which teams have coverage
+
+### 6.3 Handover View (NEW - Replaces Telegram Bot)
+
+**Quick access to "Who's on call today/tomorrow?" - the most frequently used feature.**
+
+| Feature | Description |
+|---------|-------------|
+| Today's Team | Shows all HO tiers on duty today with names, teams, and contact |
+| Tomorrow's Team | Shows who to handover to tomorrow |
+| Search by Name | Find all upcoming calls for a specific doctor |
+| One-tap copy | Copy handover info to clipboard for easy sharing |
+| Quick navigation | Swipe or tap to see any day's on-call team |
+
+#### Handover Card Display
+```
+┌─────────────────────────────────────────┐
+│  📅 TODAY - Mon, 6 Jan 2025            │
+├─────────────────────────────────────────┤
+│  🔴 HO1 (Active)     Dr. Sarah Chen    │
+│  🟠 HO2 (Passive)    Dr. Marcus Wong   │
+│  🟡 HO3 (Handover)   Dr. Emily Tan     │
+│  ⚪ HO4              Dr. Raj Sharma    │
+├─────────────────────────────────────────┤
+│  😴 Post-Call Today: Dr. Jessica Lim   │
+│  🏖️ On Leave: Dr. David Ng            │
+└─────────────────────────────────────────┘
+
+         ⬇️ HANDOVER TO ⬇️
+
+┌─────────────────────────────────────────┐
+│  📅 TOMORROW - Tue, 7 Jan 2025         │
+├─────────────────────────────────────────┤
+│  🔴 HO1 (Active)     Dr. Kevin Teo     │
+│  🟠 HO2 (Passive)    Dr. Amanda Lee    │
+│  🟡 HO3 (Handover)   Dr. Priya Nair    │
+│  ⚪ HO4              Dr. Nicole Yeo    │
+└─────────────────────────────────────────┘
+
+[📋 Copy Today] [📋 Copy Tomorrow] [🔍 Search Doctor]
+```
+
+#### Search by Doctor Name
+```
+🔍 Search: "Sarah"
+
+Dr. Sarah Chen - Upcoming Calls:
+• Mon, 6 Jan - HO1 (Active)
+• Fri, 10 Jan - HO2 (Passive)
+• Wed, 15 Jan - HO3 (Handover)
+• Sat, 25 Jan - HO1 (Active)
+```
 
 ### 6.3 Statistics Dashboard
 - Points leaderboard
