@@ -19,7 +19,7 @@ SELECT
   id as user_id,
   true as is_active
 FROM auth.users
-WHERE email = 'your-email@example.com'  -- ⚠️ CHANGE THIS TO YOUR EMAIL
+WHERE email = 'rachaelchewyuen@gmail.com'  -- ⚠️ CHANGE THIS TO YOUR EMAIL
 ON CONFLICT (email) DO UPDATE SET
   user_id = EXCLUDED.user_id,
   role = 'admin';
