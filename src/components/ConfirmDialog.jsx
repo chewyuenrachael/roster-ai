@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { AlertTriangle, Trash2, RefreshCw, Send, X } from 'lucide-react';
 
 // Confirm dialog types with their configurations
@@ -26,17 +26,69 @@ const DIALOG_TYPES = {
   }
 };
 
-const ConfirmDialog = ({ 
-  isOpen, 
-  onClose, 
-  onConfirm, 
-  title, 
-  message, 
-  confirmText = 'Confirm', 
+const ConfirmDialog = ({
+  isOpen,
+  onClose,
+  onConfirm,
+  title,
+  message,
+  confirmText = 'Confirm',
   cancelText = 'Cancel',
   type = 'warning',
   isLoading = false
 }) => {
+  const dialogRef = useRef(null);
+  const previousFocusRef = useRef(null);
+
+  // Focus trap and keyboard handling
+  useEffect(() => {
+    if (!isOpen) return;
+
+    // Store the previously focused element
+    previousFocusRef.current = document.activeElement;
+
+    // Focus the dialog
+    const timer = setTimeout(() => {
+      dialogRef.current?.focus();
+    }, 50);
+
+    // Handle escape key
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && !isLoading) {
+        onClose();
+        return;
+      }
+
+      // Focus trap
+      if (e.key === 'Tab') {
+        const focusableElements = dialogRef.current?.querySelectorAll(
+          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        );
+        if (!focusableElements?.length) return;
+
+        const firstElement = focusableElements[0];
+        const lastElement = focusableElements[focusableElements.length - 1];
+
+        if (e.shiftKey && document.activeElement === firstElement) {
+          e.preventDefault();
+          lastElement.focus();
+        } else if (!e.shiftKey && document.activeElement === lastElement) {
+          e.preventDefault();
+          firstElement.focus();
+        }
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener('keydown', handleKeyDown);
+      // Return focus to the previously focused element
+      previousFocusRef.current?.focus();
+    };
+  }, [isOpen, isLoading, onClose]);
+
   if (!isOpen) return null;
 
   const config = DIALOG_TYPES[type] || DIALOG_TYPES.warning;
@@ -58,25 +110,39 @@ const ConfirmDialog = ({
   return (
     <>
       <style>{confirmDialogStyles}</style>
-      <div className="confirm-backdrop" onClick={handleBackdropClick}>
-        <div className="confirm-dialog">
-          <button 
-            className="confirm-close-btn" 
-            onClick={onClose} 
+      <div
+        className="confirm-backdrop"
+        onClick={handleBackdropClick}
+        role="presentation"
+      >
+        <div
+          ref={dialogRef}
+          className="confirm-dialog"
+          role="alertdialog"
+          aria-modal="true"
+          aria-labelledby="confirm-dialog-title"
+          aria-describedby="confirm-dialog-message"
+          tabIndex={-1}
+        >
+          <button
+            className="confirm-close-btn"
+            onClick={onClose}
             disabled={isLoading}
+            aria-label="Close dialog"
           >
             <X size={20} />
           </button>
-          
-          <div 
-            className="confirm-icon" 
+
+          <div
+            className="confirm-icon"
             style={{ backgroundColor: config.iconBg }}
+            aria-hidden="true"
           >
             <Icon size={28} style={{ color: config.iconColor }} />
           </div>
           
-          <h3 className="confirm-title">{title}</h3>
-          <p className="confirm-message">{message}</p>
+          <h3 id="confirm-dialog-title" className="confirm-title">{title}</h3>
+          <p id="confirm-dialog-message" className="confirm-message">{message}</p>
           
           <div className="confirm-actions">
             <button 
