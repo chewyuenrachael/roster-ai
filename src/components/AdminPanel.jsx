@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Users, UserPlus, Settings, ChevronLeft, Edit2, Trash2, Save, X, 
-  Shield, UserCheck, Mail, Building2, AlertCircle, CheckCircle, 
+import {
+  Users, UserPlus, Settings, ChevronLeft, Edit2, Trash2, Save, X,
+  Shield, UserCheck, Mail, Building2, AlertCircle, CheckCircle,
   RefreshCw, Link2, Database
 } from 'lucide-react';
 import { db, supabase } from '../lib/supabase';
 import ConfirmDialog from './ConfirmDialog';
+import { useToast } from './Toast';
 
 // Team options
 const TEAMS = [
@@ -36,12 +37,16 @@ const AdminPanel = ({ onBack }) => {
   const [showAddForm, setShowAddForm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [doctorToDelete, setDoctorToDelete] = useState(null);
+  const [formErrors, setFormErrors] = useState({});
   const [newDoctor, setNewDoctor] = useState({
     name: '',
     email: '',
     team_key: 'ESU',
     role: 'doctor'
   });
+
+  // Toast notifications
+  const toast = useToast();
 
   // Fetch doctors and auth users
   const fetchData = async () => {
@@ -75,12 +80,23 @@ const AdminPanel = ({ onBack }) => {
     e.preventDefault();
     setError(null);
     setSuccess(null);
-    
+    setFormErrors({});
+
+    // Validate fields
+    const errors = {};
     if (!newDoctor.name.trim()) {
-      setError('Name is required');
+      errors.name = 'Name is required';
+    }
+    if (newDoctor.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newDoctor.email)) {
+      errors.email = 'Invalid email format';
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setFormErrors(errors);
+      toast.error('Please fix the form errors');
       return;
     }
-    
+
     try {
       const { data, error } = await db.doctors.create({
         name: newDoctor.name.trim(),
@@ -90,16 +106,16 @@ const AdminPanel = ({ onBack }) => {
         is_active: true,
         cumulative_points: 0
       });
-      
+
       if (error) throw error;
-      
+
       setDoctors(prev => [...prev, data]);
       setNewDoctor({ name: '', email: '', team_key: 'ESU', role: 'doctor' });
       setShowAddForm(false);
-      setSuccess('Doctor added successfully!');
-      setTimeout(() => setSuccess(null), 3000);
+      toast.success('Doctor added successfully!');
     } catch (err) {
       setError(err.message);
+      toast.error(err.message || 'Failed to add doctor');
     }
   };
 
@@ -107,7 +123,7 @@ const AdminPanel = ({ onBack }) => {
   const handleUpdateDoctor = async (doctor) => {
     setError(null);
     setSuccess(null);
-    
+
     try {
       const { data, error } = await db.doctors.update(doctor.id, {
         name: doctor.name,
@@ -116,15 +132,15 @@ const AdminPanel = ({ onBack }) => {
         role: doctor.role,
         is_active: doctor.is_active
       });
-      
+
       if (error) throw error;
-      
+
       setDoctors(prev => prev.map(d => d.id === doctor.id ? data : d));
       setEditingDoctor(null);
-      setSuccess('Doctor updated successfully!');
-      setTimeout(() => setSuccess(null), 3000);
+      toast.success('Doctor updated successfully!');
     } catch (err) {
       setError(err.message);
+      toast.error(err.message || 'Failed to update doctor');
     }
   };
 
@@ -137,18 +153,18 @@ const AdminPanel = ({ onBack }) => {
   // Actually delete the doctor after confirmation
   const confirmDeleteDoctor = async () => {
     if (!doctorToDelete) return;
-    
+
     setError(null);
-    
+
     try {
       const { error } = await db.doctors.delete(doctorToDelete.id);
       if (error) throw error;
-      
+
       setDoctors(prev => prev.filter(d => d.id !== doctorToDelete.id));
-      setSuccess('Doctor deleted successfully!');
-      setTimeout(() => setSuccess(null), 3000);
+      toast.success('Doctor deleted successfully!');
     } catch (err) {
       setError(err.message);
+      toast.error(err.message || 'Failed to delete doctor');
     } finally {
       setShowDeleteConfirm(false);
       setDoctorToDelete(null);
@@ -257,37 +273,59 @@ const AdminPanel = ({ onBack }) => {
           <h4>Add New Doctor</h4>
           <form onSubmit={handleAddDoctor}>
             <div className="form-row">
-              <div className="form-group">
+              <div className={`form-group ${formErrors.name ? 'has-error' : ''}`}>
                 <label>Name *</label>
                 <input
                   type="text"
                   value={newDoctor.name}
-                  onChange={e => setNewDoctor(prev => ({ ...prev, name: e.target.value }))}
+                  onChange={e => {
+                    setNewDoctor(prev => ({ ...prev, name: e.target.value }));
+                    if (formErrors.name) setFormErrors(prev => ({ ...prev, name: null }));
+                  }}
                   placeholder="Dr. John Smith"
-                  required
+                  className={formErrors.name ? 'input-error' : ''}
+                  aria-invalid={!!formErrors.name}
+                  aria-describedby={formErrors.name ? 'name-error' : undefined}
                 />
+                {formErrors.name && <span id="name-error" className="field-error">{formErrors.name}</span>}
               </div>
-              <div className="form-group">
+              <div className={`form-group ${formErrors.email ? 'has-error' : ''}`}>
                 <label>Email</label>
                 <input
                   type="email"
                   value={newDoctor.email}
-                  onChange={e => setNewDoctor(prev => ({ ...prev, email: e.target.value }))}
+                  onChange={e => {
+                    setNewDoctor(prev => ({ ...prev, email: e.target.value }));
+                    if (formErrors.email) setFormErrors(prev => ({ ...prev, email: null }));
+                  }}
                   placeholder="john.smith@hospital.com"
+                  className={formErrors.email ? 'input-error' : ''}
+                  aria-invalid={!!formErrors.email}
+                  aria-describedby={formErrors.email ? 'email-error' : undefined}
                 />
+                {formErrors.email && <span id="email-error" className="field-error">{formErrors.email}</span>}
               </div>
             </div>
             <div className="form-row">
               <div className="form-group">
                 <label>Team</label>
-                <select
-                  value={newDoctor.team_key}
-                  onChange={e => setNewDoctor(prev => ({ ...prev, team_key: e.target.value }))}
-                >
-                  {TEAMS.map(team => (
-                    <option key={team.key} value={team.key}>{team.key} - {team.name}</option>
-                  ))}
-                </select>
+                <div className="team-select-wrapper">
+                  <span
+                    className="team-color-indicator"
+                    style={{ backgroundColor: getTeamColor(newDoctor.team_key) }}
+                  />
+                  <select
+                    value={newDoctor.team_key}
+                    onChange={e => setNewDoctor(prev => ({ ...prev, team_key: e.target.value }))}
+                    className="team-select"
+                  >
+                    {TEAMS.map(team => (
+                      <option key={team.key} value={team.key}>
+                        {team.key} - {team.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
               <div className="form-group">
                 <label>Role</label>
@@ -354,14 +392,21 @@ const AdminPanel = ({ onBack }) => {
                   <div className="form-row">
                     <div className="form-group">
                       <label>Team</label>
-                      <select
-                        value={editingDoctor.team_key}
-                        onChange={e => setEditingDoctor(prev => ({ ...prev, team_key: e.target.value }))}
-                      >
-                        {TEAMS.map(team => (
-                          <option key={team.key} value={team.key}>{team.key}</option>
-                        ))}
-                      </select>
+                      <div className="team-select-wrapper">
+                        <span
+                          className="team-color-indicator"
+                          style={{ backgroundColor: getTeamColor(editingDoctor.team_key) }}
+                        />
+                        <select
+                          value={editingDoctor.team_key}
+                          onChange={e => setEditingDoctor(prev => ({ ...prev, team_key: e.target.value }))}
+                          className="team-select"
+                        >
+                          {TEAMS.map(team => (
+                            <option key={team.key} value={team.key}>{team.key} - {team.name}</option>
+                          ))}
+                        </select>
+                      </div>
                     </div>
                     <div className="form-group">
                       <label>Role</label>
@@ -715,6 +760,51 @@ const adminStyles = `
     outline: none;
     border-color: #0F766E;
     box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.1);
+  }
+
+  /* Field-level error states */
+  .form-group.has-error input,
+  .form-group.has-error select,
+  .input-error {
+    border-color: #DC2626 !important;
+    background-color: #FEF2F2;
+  }
+
+  .form-group.has-error input:focus,
+  .form-group.has-error select:focus {
+    box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1);
+  }
+
+  .field-error {
+    font-size: 12px;
+    color: #DC2626;
+    margin-top: 4px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  /* Team select with color indicator */
+  .team-select-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+  }
+
+  .team-color-indicator {
+    position: absolute;
+    left: 12px;
+    width: 12px;
+    height: 12px;
+    border-radius: 3px;
+    pointer-events: none;
+    z-index: 1;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  }
+
+  .team-select {
+    padding-left: 32px !important;
+    width: 100%;
   }
 
   .checkbox-group {
