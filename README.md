@@ -6,7 +6,7 @@
 
 ## 🔴 The Problem
 
-Currently, hospital shift allocation is a painful manual process:
+Currently, hospital shift allocation is a slow manual process:
 
 1. **Doctors** indicate their availability by coloring cells on a shared spreadsheet (AL, CB, etc.)
 2. **The "Roster Monster"** (a designated person) manually creates the schedule, trying to:
