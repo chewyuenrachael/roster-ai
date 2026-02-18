@@ -44,7 +44,7 @@ Quick access to "Who's on call today/tomorrow?" — the most frequently used fea
 └─────────────────────────────────────────┘
 ```
 
-- **Today & Tomorrow view** — See who to handover to
+- **Today & Tomorrow view** — See which doctors to handover to
 - **Navigate any date** — Browse past and future rosters
 - **Copy to clipboard** — One tap to share via message
 - **Search by doctor** — Find any doctor's upcoming calls
