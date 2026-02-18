@@ -11,7 +11,7 @@ Currently, hospital shift allocation is a slow manual process:
 1. **Doctors** indicate their availability by coloring cells on a shared spreadsheet (AL, CB, etc.)
 2. **The "Roster Monster"** (a designated person) manually creates the schedule, trying to:
    - Ensure fair distribution of calls
-   - Respect everyone's leave requests
+   - Maiximise fulfilling leave requests
    - Balance weekend duties
    - Maintain minimum staffing per team
 3. This takes **hours of work** each month and often results in disputes over fairness
