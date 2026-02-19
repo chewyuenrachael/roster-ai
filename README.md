@@ -67,13 +67,6 @@ See which wards each on-call tier covers and their responsibilities.
 | HO3 | Wards 41-44 | Evening handovers, Discharge summaries, Leaves 10pm |
 | HO4 | Day Surgery, Clinics | Elective support, Clinic overflow |
 
-### 💊 Antibiotic Guidelines (`/abx`)
-Quick reference antibiotic guidelines by body system.
-
-- **Systems**: Respiratory, Intra-abdominal, Skin & Soft Tissue, Urinary, CNS, Sepsis
-- **Severity tiers**: Mild → Moderate → Severe regimens
-- **Expandable cards** — Tap condition to see full guidelines
-
 ### ⚙️ Configurable HO Tiers (HO1-HO11)
 Different hospitals use different call structures. RosterAI supports 1-11 HO tiers, each configurable with:
 
